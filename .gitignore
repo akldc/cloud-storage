@@ -1,0 +1,22 @@
+# 编译产物
+build/
+cmake-build-*/
+*.o
+*.a
+*.so
+*.dylib
+*.exe
+
+# IDE
+.vscode/
+.idea/
+
+# 系统文件
+.DS_Store
+
+# 日志
+*.log
+
+# 环境变量及本地配置
+.env
+.env.*
