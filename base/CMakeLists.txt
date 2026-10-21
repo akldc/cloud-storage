@@ -27,6 +27,8 @@ set(base_HEADERS
     TimeZone.h
     Exception.h
     Atomic.h
+    BlockingQueue.h
+    BoundedBlockingQueue.h
     Mutex.h
     Condition.h
     Singleton.h
@@ -39,17 +41,23 @@ set(base_HEADERS
     CountDownLatch.h
     ThreadPool.h
     WeakCallback.h
+    ProcessInfo.h
+    FileUtil.h
+    LogFile.h
+    AsyncLogging.h
+    Endian.h
 )
 
 # 创建库并设置属性
 add_library(mymuduo_base ${base_SRCS})
-target_link_libraries(mymuduo_base pthread rt)
-target_include_directories(mymuduo_base PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/..)
+add_library(mymuduo::base ALIAS mymuduo_base)
+set_target_properties(mymuduo_base PROPERTIES EXPORT_NAME base)
+target_link_libraries(mymuduo_base PUBLIC Threads::Threads ${CMAKE_DL_LIBS})
+target_include_directories(mymuduo_base PUBLIC
+    $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}>
+    $<INSTALL_INTERFACE:include/mymuduo>)
+target_compile_features(mymuduo_base PUBLIC cxx_std_17)
 
 # 安装
-install(TARGETS mymuduo_base DESTINATION lib)
+install(TARGETS mymuduo_base EXPORT mymuduoTargets DESTINATION lib)
 install(FILES ${base_HEADERS} DESTINATION include/mymuduo/base)
-
-if(NOT CMAKE_BUILD_NO_EXAMPLES)
-    # 这里将在后续课程中添加示例程序
-endif() 

@@ -1,6 +1,7 @@
 #include "net/TcpServer.h"
 #include "base/Logging.h"
 #include "net/TcpConnection.h"
+#include "net/SocketsOps.h"
 
 #include <strings.h>
 #include <functional>
@@ -39,7 +40,7 @@ TcpServer::TcpServer(EventLoop* loop,
 {
     // 当有新用户连接时会执行TcpServer::newConnection回调
     acceptor_->setNewConnectionCallback(
-        std::bind(&TcpServer::newConnection, this, 
+        std::bind(&TcpServer::newConnection, this,
             std::placeholders::_1, std::placeholders::_2));
 }
 
@@ -58,6 +59,7 @@ TcpServer::~TcpServer()
 // 设置底层subloop的个数
 void TcpServer::setThreadNum(int numThreads)
 {
+    assert(numThreads >= 0);
     threadPool_->setThreadNum(numThreads);
 }
 
@@ -80,19 +82,12 @@ void TcpServer::newConnection(int sockfd, const InetAddress& peerAddr)
     ++nextConnId_;
 
     std::stringstream ss;
-    ss << "TcpServer::newConnection [" << name_ << "] - new connection [" 
+    ss << "TcpServer::newConnection [" << name_ << "] - new connection ["
        << connName << "] from " << peerAddr.toIpPort();
     LOG_INFO << ss.str();
 
     // 通过sockfd获取其绑定的本机的ip地址和端口信息
-    sockaddr_in local;
-    ::bzero(&local, sizeof local);
-    socklen_t addrlen = sizeof local;
-    if (::getsockname(sockfd, reinterpret_cast<sockaddr*>(&local), &addrlen) < 0)
-    {
-        LOG_ERROR << "sockets::getLocalAddr";
-    }
-    InetAddress localAddr(local);
+    InetAddress localAddr(sockets::getLocalAddr(sockfd));
 
     // 根据连接成功的sockfd，创建TcpConnection连接对象
     TcpConnectionPtr conn(new TcpConnection(
@@ -124,7 +119,7 @@ void TcpServer::removeConnection(const TcpConnectionPtr& conn)
 void TcpServer::removeConnectionInLoop(const TcpConnectionPtr& conn)
 {
     std::stringstream ss;
-    ss << "TcpServer::removeConnectionInLoop [" << name_ 
+    ss << "TcpServer::removeConnectionInLoop [" << name_
        << "] - connection " << conn->name();
     LOG_INFO << ss.str();
 
@@ -135,4 +130,4 @@ void TcpServer::removeConnectionInLoop(const TcpConnectionPtr& conn)
 }
 
 }  // namespace net
-}  // namespace mymuduo 
+}  // namespace mymuduo

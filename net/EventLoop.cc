@@ -18,7 +18,7 @@ using namespace mymuduo::net;
 namespace {
 thread_local EventLoop* t_loopInThisThread = nullptr;
 
-const int kPollTimeMs = 1;  // 将超时时间从10ms改为1ms，以更快地响应写事件
+const int kPollTimeMs = 10000;
 
 int createEventfd() {
     int evtfd = ::eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC);
@@ -123,6 +123,9 @@ void EventLoop::queueInLoop(Functor cb) {
 void EventLoop::wakeup() {
     uint64_t one = 1;
     ssize_t n = ::write(wakeupFd_, &one, sizeof one);
+    if (n < 0 && errno == EAGAIN) {
+        return;  // eventfd is already signalled
+    }
     if (n != sizeof one) {
         LOG_ERROR << "EventLoop::wakeup() writes " << n << " bytes instead of 8";
     }
@@ -199,4 +202,4 @@ TimerId EventLoop::runEvery(double interval, TimerCallback cb) {
 
 void EventLoop::cancel(TimerId timerId) {
     timerQueue_->cancel(timerId);
-} 
+}

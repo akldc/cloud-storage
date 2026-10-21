@@ -2,7 +2,6 @@
 
 #include "Buffer.h"
 #include "HttpRequest.h"
-#include "base/Logging.h"
 #include "base/copyable.h"
 #include "base/Timestamp.h"
 #include <memory>
@@ -34,15 +33,12 @@ class HttpContext : public mymuduo::copyable
     : state_(kExpectRequestLine),
       contentLength_(0),
       bodyReceived_(0),
-      isChunked_(false)
+      isChunked_(false),
+      hasContentLength_(false)
   {
   }
 
-  ~HttpContext()
-  {
-    LOG_INFO << "HttpContext destroyed";
-    // customContext_.reset();
-  }
+  ~HttpContext() = default;
 
   // default copy-ctor, dtor and assignment are fine
 
@@ -72,6 +68,7 @@ class HttpContext : public mymuduo::copyable
     contentLength_ = 0;
     bodyReceived_ = 0;
     isChunked_ = false;
+    hasContentLength_ = false;
     customContext_.reset();
   }
 
@@ -102,8 +99,9 @@ class HttpContext : public mymuduo::copyable
   size_t contentLength_;  // 用于存储 Content-Length 的值
   size_t bodyReceived_;   // 已接收的 body 长度
   bool isChunked_;        // 是否为 chunked 传输
+  bool hasContentLength_;
   std::shared_ptr<void> customContext_;  // 自定义上下文存储
 };
 
 } // namespace net
-} // namespace mymuduo 
+} // namespace mymuduo

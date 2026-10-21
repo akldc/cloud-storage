@@ -2,6 +2,8 @@
 
 #include <map>
 #include <string>
+#include <cstdio>
+#include <strings.h>
 #include "Buffer.h"
 #include <functional>
 
@@ -32,9 +34,7 @@ public:
           async_(false)
     {
     }
-    ~HttpResponse() {
-        LOG_INFO << "HttpResponse::~HttpResponse()";
-    }
+    ~HttpResponse() = default;
 
     void setStatusCode(HttpStatusCode code) { statusCode_ = code; }
     void setStatusMessage(const std::string& message) { statusMessage_ = message; }
@@ -73,6 +73,20 @@ public:
             output->append("\r\n");
         }
 
+        bool hasContentLength = false;
+        for (const auto& header : headers_) {
+            if (::strcasecmp(header.first.c_str(), "Content-Length") == 0) {
+                hasContentLength = true;
+                break;
+            }
+        }
+        if (!hasContentLength) {
+            snprintf(buf, sizeof(buf), "%zu", body_.size());
+            output->append("Content-Length: ");
+            output->append(buf);
+            output->append("\r\n");
+        }
+
         output->append("\r\n");
         output->append(body_);
     }
@@ -88,4 +102,4 @@ private:
 }; // class HttpResponse
 
 } // namespace net
-} // namespace mymuduo 
+} // namespace mymuduo

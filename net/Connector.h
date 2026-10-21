@@ -10,6 +10,7 @@
 
 #include <functional>
 #include <memory>
+#include <atomic>
 
 #include "base/noncopyable.h"
 #include "InetAddress.h"
@@ -46,10 +47,10 @@ public:
 
     // 开始连接
     void start();    // 可以在任意线程调用
-    
+
     // 重新连接
     void restart();  // 必须在loop线程中调用
-    
+
     // 停止连接
     void stop();     // 可以在任意线程调用
 
@@ -62,37 +63,37 @@ private:
     static const int kInitRetryDelayMs = 500;     // 初始重试延迟(0.5秒)
 
     void setState(States s) { state_ = s; }
-    
+
     // 在loop线程中启动连接
     void startInLoop();
-    
+
     // 停止连接
     void stopInLoop();
-    
+
     // 连接
     void connect();
-    
+
     // 正在连接
     void connecting(int sockfd);
-    
+
     // 处理写事件(连接完成或失败)
     void handleWrite();
-    
+
     // 处理错误
     void handleError();
-    
+
     // 重试
     void retry(int sockfd);
-    
+
     // 移除并重置Channel
     int removeAndResetChannel();
-    
+
     // 重置Channel
     void resetChannel();
 
     EventLoop* loop_;  // 所属的事件循环
     InetAddress serverAddr_;  // 服务器地址
-    bool connect_;  // 是否连接
+    std::atomic<bool> connect_;  // 是否连接
     States state_;  // 连接状态
     std::unique_ptr<Channel> channel_;  // 用于观察socket上的事件
     NewConnectionCallback newConnectionCallback_;  // 新连接回调函数
@@ -103,4 +104,4 @@ private:
 using ConnectorPtr = std::shared_ptr<Connector>;
 
 }  // namespace net
-}  // namespace mymuduo 
+}  // namespace mymuduo

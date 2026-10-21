@@ -7,7 +7,6 @@ using namespace mymuduo::net;
 EventLoopThread::EventLoopThread(const ThreadInitCallback& cb,
                                const std::string& name)
     : loop_(nullptr)
-    , exiting_(false)
     , thread_(std::bind(&EventLoopThread::threadFunc, this), name)
     , mutex_()
     , cond_()
@@ -15,11 +14,16 @@ EventLoopThread::EventLoopThread(const ThreadInitCallback& cb,
 }
 
 EventLoopThread::~EventLoopThread() {
-    exiting_ = true;
-    if (loop_ != nullptr) {
-        // 如果loop_不为空，说明线程还在运行
-        loop_->quit();     // 退出事件循环
-        thread_.join();    // 等待线程结束
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        // Holding mutex_ prevents threadFunc from clearing/destroying loop
+        // between the pointer check and the thread-safe quit() call.
+        if (loop_ != nullptr) {
+            loop_->quit();
+        }
+    }
+    if (thread_.started() && !thread_.joined()) {
+        thread_.join();
     }
 }
 
@@ -57,6 +61,8 @@ void EventLoopThread::threadFunc() {
     loop.loop();  // EventLoop loop  => Poller.poll
 
     // 事件循环结束，清理
-    std::unique_lock<std::mutex> lock(mutex_);
-    loop_ = nullptr;
-} 
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        loop_ = nullptr;
+    }
+}

@@ -1,73 +1,62 @@
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.16)
 
-project(mymuduo C CXX)
+project(mymuduo VERSION 0.2.0 LANGUAGES CXX)
 
-# 设置C++标准
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-
-# 设置编译选项
-if(NOT CMAKE_BUILD_TYPE)
-    # set(CMAKE_BUILD_TYPE "Release")
-    set(CMAKE_BUILD_TYPE "Debug")
-
+if(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    message(FATAL_ERROR "mymuduo currently requires Linux (epoll/eventfd/timerfd)")
 endif()
 
-# 查找Boost库
-find_package(Boost REQUIRED)
-include_directories(${Boost_INCLUDE_DIRS})
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
 
-# Debug模式下的编译选项
-set(CMAKE_CXX_FLAGS_DEBUG "-O0 -g -Wall -Wextra -Werror -Wconversion -Wno-reorder -Wno-unused-parameter -Wno-shadow")
-# Release模式下的编译选项
-set(CMAKE_CXX_FLAGS_RELEASE "-O2 -DNDEBUG -Wall -Wno-shadow -Wno-reorder")
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/bin)
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/lib)
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/lib)
 
-# 通用编译选项
-set(CXX_FLAGS
-    -Wall
-    -Wextra
-    -Werror
-    -Wconversion
-    -Wno-unused-parameter
-    -Wold-style-cast
-    -Woverloaded-virtual
-    -Wpointer-arith
-    -Wshadow
-    -Wwrite-strings
-    -march=native
-    -std=c++17
-    -rdynamic
-)
-
-string(REPLACE ";" " " CMAKE_CXX_FLAGS "${CXX_FLAGS}")
-
-# 设置输出目录
-set(EXECUTABLE_OUTPUT_PATH ${PROJECT_BINARY_DIR}/bin)
-set(LIBRARY_OUTPUT_PATH ${PROJECT_BINARY_DIR}/lib)
-
-# 查找依赖库
 find_package(Threads REQUIRED)
-# find_package(Boost REQUIRED)
-include_directories(${PROJECT_SOURCE_DIR})
-# 添加子目录
+include(CMakePackageConfigHelpers)
+
+option(MYMUDUO_BUILD_HTTP "Build the optional HTTP protocol library" ON)
+option(MYMUDUO_BUILD_EXAMPLES "Build network examples" ON)
+option(MYMUDUO_BUILD_TESTS "Build network regression tests" ON)
+option(MYMUDUO_BUILD_LEGACY_FILE_MANAGER
+       "Build the legacy MySQL-backed web file manager" OFF)
+
 add_subdirectory(base)
 add_subdirectory(net)
 
-# 是否构建测试
-option(BUILD_TESTS "Build tests" ON)
-if(BUILD_TESTS)
-    enable_testing()
-    # add_subdirectory(tests)
+if(MYMUDUO_BUILD_EXAMPLES)
+    add_subdirectory(examples)
 endif()
 
-# 是否构建示例
-option(BUILD_APPLICATION "Build application" ON)
-if(BUILD_APPLICATION)
-    add_subdirectory(application)
+if(MYMUDUO_BUILD_TESTS)
+    include(CTest)
+    if(BUILD_TESTING)
+        add_subdirectory(tests)
+    endif()
 endif()
 
-# 打印配置信息
-message(STATUS "CXX_FLAGS = " ${CMAKE_CXX_FLAGS})
-message(STATUS "CMAKE_BUILD_TYPE = " ${CMAKE_BUILD_TYPE})
-message(STATUS "CMAKE_CXX_FLAGS_DEBUG = " ${CMAKE_CXX_FLAGS_DEBUG})
-message(STATUS "CMAKE_CXX_FLAGS_RELEASE = " ${CMAKE_CXX_FLAGS_RELEASE}) 
+if(MYMUDUO_BUILD_LEGACY_FILE_MANAGER)
+    if(NOT MYMUDUO_BUILD_HTTP)
+        message(FATAL_ERROR "The legacy file manager requires MYMUDUO_BUILD_HTTP=ON")
+    endif()
+    add_subdirectory(legacy/file_manager)
+endif()
+
+install(EXPORT mymuduoTargets
+        NAMESPACE mymuduo::
+        DESTINATION lib/cmake/mymuduo)
+
+configure_package_config_file(
+    cmake/mymuduoConfig.cmake.in
+    ${CMAKE_CURRENT_BINARY_DIR}/mymuduoConfig.cmake
+    INSTALL_DESTINATION lib/cmake/mymuduo)
+write_basic_package_version_file(
+    ${CMAKE_CURRENT_BINARY_DIR}/mymuduoConfigVersion.cmake
+    VERSION ${PROJECT_VERSION}
+    COMPATIBILITY SameMajorVersion)
+install(FILES
+    ${CMAKE_CURRENT_BINARY_DIR}/mymuduoConfig.cmake
+    ${CMAKE_CURRENT_BINARY_DIR}/mymuduoConfigVersion.cmake
+    DESTINATION lib/cmake/mymuduo)

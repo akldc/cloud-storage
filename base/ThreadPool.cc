@@ -28,10 +28,11 @@ ThreadPool::~ThreadPool()
 void ThreadPool::start(int numThreads)
 {
     assert(!running_);
+    assert(numThreads >= 0);
     running_ = true;
     threadSize_ = numThreads;
     // 创建线程
-    threads_.reserve(threadSize_);
+    threads_.reserve(static_cast<size_t>(threadSize_));
     for (int i = 0; i < threadSize_; ++i)
     {
         char id[32];
@@ -40,14 +41,9 @@ void ThreadPool::start(int numThreads)
             std::bind(&ThreadPool::runInThread, this),
             name_+id
         ));
-        threads_[i]->start();
+        threads_[static_cast<size_t>(i)]->start();
     }
 
-    // 如果threadSize_为0，说明是单线程模式，启动一个线程执行任务
-    if (threadSize_ == 0 && !threads_.empty())
-    {
-        threads_[0]->start();
-    }
 }
 
 void ThreadPool::stop()
@@ -75,8 +71,15 @@ void ThreadPool::run(Task task)
 {
     if (threads_.empty())
     {
-        // 如果线程池为空，直接执行任务
-        task();
+        bool runInline = false;
+        {
+            MutexLockGuard lock(mutex_);
+            runInline = running_;
+        }
+        if (runInline && task)
+        {
+            task();
+        }
     }
     else
     {
@@ -123,29 +126,14 @@ void ThreadPool::runInThread()
 {
     try
     {
-        if (threadSize_ == 0)
+        while (true)
         {
-            // 单线程模式
-            while (running_)
+            Task task(take());
+            if (!task)
             {
-                Task task(take());
-                if (task)
-                {
-                    task();
-                }
+                break;
             }
-        }
-        else
-        {
-            // 多线程模式
-            while (running_)
-            {
-                Task task(take());
-                if (task)
-                {
-                    task();
-                }
-            }
+            task();
         }
     }
     catch (const Exception& ex)
@@ -171,4 +159,4 @@ void ThreadPool::runInThread()
 bool ThreadPool::isFull() const
 {
     return maxQueueSize_ > 0 && queue_.size() >= maxQueueSize_;
-} 
+}

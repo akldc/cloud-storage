@@ -47,7 +47,8 @@ public:
 
     // 返回是否正在监听
     bool listening() const { return listening_; }
-    
+    const InetAddress& listenAddress() const { return listenAddr_; }
+
     // 开始监听
     // 此函数必须在设置回调函数之后调用
     void listen();
@@ -60,10 +61,11 @@ private:
     EventLoop* loop_;  // Acceptor所属的事件循环
     Socket acceptSocket_;  // 监听socket
     Channel acceptChannel_;  // 监听Channel,用于观察监听socket上的可读事件
+    InetAddress listenAddr_;  // bind后的实际地址（支持端口0）
     NewConnectionCallback newConnectionCallback_;  // 新连接回调函数
     bool listening_;  // 是否正在监听
     int idleFd_;  // 空闲的文件描述符，用于防止文件描述符耗尽
 };
 
 }  // namespace net
-}  // namespace mymuduo 
+}  // namespace mymuduo

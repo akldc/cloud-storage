@@ -2,10 +2,14 @@
 
 #include <map>
 #include <string>
+#include <unordered_map>
+#include <vector>
+#include <cctype>
+#include <cstdio>
+#include <strings.h>
 #include <assert.h>
 #include "base/copyable.h"
 #include "base/Timestamp.h"
-#include "base/Logging.h"
 namespace mymuduo {
 namespace net {
 class HttpRequest : public mymuduo::copyable
@@ -111,10 +115,7 @@ class HttpRequest : public mymuduo::copyable
   { return query_; }
 
   void setBody(const string& body) { body_ = body; }
-  void appendToBody(const char* data, size_t len) { 
-    LOG_DEBUG << "orig body size: " << body_.size() << ", append len: " << len;
-    body_.append(data, len); 
-    }
+  void appendToBody(const char* data, size_t len) { body_.append(data, len); }
   const string& body() const { return body_; }
 
   void setReceiveTime(Timestamp t)
@@ -142,10 +143,13 @@ class HttpRequest : public mymuduo::copyable
   string getHeader(const string& field) const
   {
     string result;
-    std::map<string, string>::const_iterator it = headers_.find(field);
-    if (it != headers_.end())
+    for (const auto& header : headers_)
     {
-      result = it->second;
+      if (::strcasecmp(header.first.c_str(), field.c_str()) == 0)
+      {
+        result = header.second;
+        break;
+      }
     }
     return result;
   }
@@ -171,7 +175,7 @@ class HttpRequest : public mymuduo::copyable
       return defaultValue;
     }
     q = q.substr(1);  // 移除开头的?
-    
+
     std::vector<std::string> params;
     size_t start = 0;
     size_t end = q.find('&');
@@ -181,7 +185,7 @@ class HttpRequest : public mymuduo::copyable
       end = q.find('&', start);
     }
     params.push_back(q.substr(start));
-    
+
     for (const auto& param : params) {
       size_t pos = param.find('=');
       if (pos != std::string::npos) {
@@ -193,10 +197,10 @@ class HttpRequest : public mymuduo::copyable
         return "true";
       }
     }
-    
+
     return defaultValue;
   }
-  
+
   // 获取路径参数
   std::string getPathParam(const std::string& name) const {
     auto it = pathParams_.find(name);
@@ -205,12 +209,12 @@ class HttpRequest : public mymuduo::copyable
     }
     return "";
   }
-  
+
   // 设置路径参数
   void setPathParams(const std::unordered_map<std::string, std::string>& params) {
     pathParams_ = params;
   }
-  
+
   // URL解码函数（简化版）
   std::string urlDecode(const std::string& encoded) const {
     std::string result;
@@ -251,4 +255,4 @@ class HttpRequest : public mymuduo::copyable
 
 
 } // namespace net
-} // namespace mymuduo 
+} // namespace mymuduo

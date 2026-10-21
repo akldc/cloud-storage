@@ -19,6 +19,13 @@ namespace
 
 typedef struct sockaddr SA;
 
+socklen_t sockaddrLength(const SA* addr)
+{
+    return static_cast<socklen_t>(addr->sa_family == AF_INET6
+        ? sizeof(struct sockaddr_in6)
+        : sizeof(struct sockaddr_in));
+}
+
 #if VALGRIND || defined (NO_ACCEPT4)
 ///
 /// 设置文件描述符为非阻塞和close-on-exec
@@ -94,7 +101,7 @@ int sockets::createNonblockingOrDie(sa_family_t family)
 /// 绑定socket地址
 void sockets::bindOrDie(int sockfd, const struct sockaddr* addr)
 {
-    int ret = ::bind(sockfd, addr, static_cast<socklen_t>(sizeof(struct sockaddr_in6)));
+    int ret = ::bind(sockfd, addr, sockaddrLength(addr));
     if (ret < 0)
     {
         LOG_SYSFATAL << "sockets::bindOrDie";
@@ -119,7 +126,9 @@ int sockets::accept(int sockfd, struct sockaddr_in6* addr)
     socklen_t addrlen = static_cast<socklen_t>(sizeof *addr);
 #if VALGRIND || defined (NO_ACCEPT4)
     int connfd = ::accept(sockfd, sockaddr_cast(addr), &addrlen);
-    setNonBlockAndCloseOnExec(connfd);
+    if (connfd >= 0) {
+        setNonBlockAndCloseOnExec(connfd);
+    }
 #else
     int connfd = ::accept4(sockfd, sockaddr_cast(addr),
                           &addrlen, SOCK_NONBLOCK | SOCK_CLOEXEC);
@@ -127,7 +136,6 @@ int sockets::accept(int sockfd, struct sockaddr_in6* addr)
     if (connfd < 0)
     {
         int savedErrno = errno;
-        LOG_SYSERR << "Socket::accept";
         switch (savedErrno)
         {
             case EAGAIN:
@@ -162,7 +170,7 @@ int sockets::accept(int sockfd, struct sockaddr_in6* addr)
 /// 连接socket
 int sockets::connect(int sockfd, const struct sockaddr* addr)
 {
-    return ::connect(sockfd, addr, static_cast<socklen_t>(sizeof(struct sockaddr_in6)));
+    return ::connect(sockfd, addr, sockaddrLength(addr));
 }
 
 ///
@@ -330,4 +338,4 @@ bool sockets::isSelfConnect(int sockfd)
     {
         return false;
     }
-} 
+}

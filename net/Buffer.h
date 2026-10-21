@@ -11,7 +11,7 @@ namespace mymuduo {
 namespace net {
 
 /// @brief 网络库底层的缓冲区类
-/// 
+///
 /// Buffer类提供了一个连续的内存缓冲区，用于网络读写操作。
 /// 缓冲区被分为4个区域：
 /// +-------------------+------------------+------------------+
@@ -83,7 +83,7 @@ public:
     const char* findEOL(const char* start) const {
         assert(peek() <= start);
         assert(start <= beginWrite());
-        const void* eol = memchr(start, '\n', beginWrite() - start);
+        const void* eol = memchr(start, '\n', static_cast<size_t>(beginWrite() - start));
         return static_cast<const char*>(eol);
     }
 
@@ -101,7 +101,7 @@ public:
     void retrieveUntil(const char* end) {
         assert(peek() <= end);
         assert(end <= beginWrite());
-        retrieve(end - peek());
+        retrieve(static_cast<size_t>(end - peek()));
     }
 
     /// @brief 读取所有数据
@@ -211,4 +211,4 @@ private:
 }  // namespace net
 }  // namespace mymuduo
 
-#endif  // MYMUDUO_NET_BUFFER_H 
+#endif  // MYMUDUO_NET_BUFFER_H

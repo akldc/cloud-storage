@@ -35,7 +35,8 @@ Connector::~Connector() {
 // 可以在任意线程调用
 void Connector::start() {
     connect_ = true;
-    loop_->runInLoop(std::bind(&Connector::startInLoop, this));
+    ConnectorPtr self = shared_from_this();
+    loop_->runInLoop([self]() { self->startInLoop(); });
 }
 
 // 在loop线程中启动连接
@@ -52,7 +53,8 @@ void Connector::startInLoop() {
 // 停止连接
 void Connector::stop() {
     connect_ = false;
-    loop_->queueInLoop(std::bind(&Connector::stopInLoop, this));
+    ConnectorPtr self = shared_from_this();
+    loop_->queueInLoop([self]() { self->stopInLoop(); });
 }
 
 // 在loop线程中停止连接
@@ -140,7 +142,8 @@ int Connector::removeAndResetChannel() {
     int sockfd = channel_->fd();
     // 不能在handleWrite/handleError等回调函数中删除channel
     // 因为正在调用channel的回调函数
-    loop_->queueInLoop(std::bind(&Connector::resetChannel, this));
+    ConnectorPtr self = shared_from_this();
+    loop_->queueInLoop([self]() { self->resetChannel(); });
     return sockfd;
 }
 
@@ -208,4 +211,4 @@ void Connector::retry(int sockfd) {
 }
 
 }  // namespace net
-}  // namespace mymuduo 
+}  // namespace mymuduo

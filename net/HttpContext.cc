@@ -1,5 +1,8 @@
 #include "HttpContext.h"
 #include <algorithm>
+#include <cerrno>
+#include <climits>
+#include <cstdlib>
 #include <string.h>
 #include "base/Timestamp.h"
 #include "base/Logging.h"
@@ -57,7 +60,7 @@ bool HttpContext::processHeaders(Buffer* buf) {
             const char* colon = std::find(buf->peek(), crlf, ':');
             if (colon != crlf) {
                 request_.addHeader(buf->peek(), colon, crlf);
-                
+
                 // 检查是否有 Content-Length 头
                 std::string field(buf->peek(), colon);
                 if (strcasecmp(field.c_str(), "Content-Length") == 0) {
@@ -65,8 +68,30 @@ bool HttpContext::processHeaders(Buffer* buf) {
                     while (colon < crlf && isspace(*colon)) {
                         ++colon;  // 跳过空白字符
                     }
-                    contentLength_ = static_cast<size_t>(atoi(colon));
-                    LOG_INFO << "Content-Length: " << contentLength_;
+                    const char* valueEnd = crlf;
+                    while (valueEnd > colon && isspace(static_cast<unsigned char>(valueEnd[-1]))) {
+                        --valueEnd;
+                    }
+                    std::string value(colon, valueEnd);
+                    if (value.empty() ||
+                        !std::all_of(value.begin(), value.end(), [](unsigned char ch) {
+                            return std::isdigit(ch) != 0;
+                        })) {
+                        return false;
+                    }
+                    char* end = nullptr;
+                    errno = 0;
+                    unsigned long long parsed = std::strtoull(value.c_str(), &end, 10);
+                    if (errno == ERANGE || end == value.c_str() || *end != '\0' ||
+                        parsed > static_cast<unsigned long long>(SIZE_MAX)) {
+                        return false;
+                    }
+                    const size_t length = static_cast<size_t>(parsed);
+                    if (hasContentLength_ && length != contentLength_) {
+                        return false;
+                    }
+                    contentLength_ = length;
+                    hasContentLength_ = true;
                 } else if (strcasecmp(field.c_str(), "Transfer-Encoding") == 0) {
                     ++colon;
                     while (colon < crlf && isspace(*colon)) {
@@ -75,7 +100,6 @@ bool HttpContext::processHeaders(Buffer* buf) {
                     std::string encoding(colon, crlf);
                     if (strcasecmp(encoding.c_str(), "chunked") == 0) {
                         isChunked_ = true;
-                        LOG_INFO << "Transfer-Encoding: chunked";
                     }
                 }
                 buf->retrieveUntil(crlf + 2);
@@ -98,14 +122,12 @@ bool HttpContext::processBody(Buffer* buf) {
         return false;
     } else {
         size_t readable = buf->readableBytes();
-        LOG_DEBUG << "processBody readable: " << readable;
         size_t toRead = std::min(readable, remainingLength());
         if (toRead > 0) {
             request_.appendToBody(buf->peek(), toRead);
             bodyReceived_ += toRead;
             buf->retrieve(toRead);
         }
-        LOG_DEBUG << "bodyReceived_: " << bodyReceived_ << ", contentLength_: " << contentLength_;
         return bodyReceived_ >= contentLength_;
     }
 }
@@ -116,9 +138,6 @@ HttpContext::ParseResult HttpContext::parseRequest(Buffer* buf, Timestamp receiv
     bool hasMore = true;
     ParseResult result = kNeedMore;
 
-    LOG_DEBUG << "parseRequest state_: " << state_ << ", result: " << result;
-    LOG_DEBUG << "buf: " << buf->peek();
-    
     while (hasMore) {
         if (state_ == kExpectRequestLine) {
             const char* crlf = buf->findCRLF();
@@ -139,6 +158,11 @@ HttpContext::ParseResult HttpContext::parseRequest(Buffer* buf, Timestamp receiv
             ok = processHeaders(buf);
             if (ok) {
                 if (state_ == kExpectBody) {
+                    if (isChunked_ && hasContentLength_) {
+                        result = kError;
+                        hasMore = false;
+                        continue;
+                    }
                     if (contentLength_ == 0 && !isChunked_) {
                         // 没有请求体
                         state_ = kGotAll;
@@ -159,6 +183,11 @@ HttpContext::ParseResult HttpContext::parseRequest(Buffer* buf, Timestamp receiv
                 hasMore = false;
             }
         } else if (state_ == kExpectBody) {
+            if (isChunked_) {
+                result = kError;  // chunked decoding is not implemented
+                hasMore = false;
+                continue;
+            }
             // 处理请求体
             if (processBody(buf)) {
                 state_ = kGotAll;

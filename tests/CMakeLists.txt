@@ -1,0 +1,17 @@
+function(add_mymuduo_test name)
+    add_executable(${name} ${name}.cc)
+    target_link_libraries(${name} PRIVATE mymuduo::net)
+    add_test(NAME ${name} COMMAND ${name})
+    set_tests_properties(${name} PROPERTIES TIMEOUT 15)
+endfunction()
+
+add_mymuduo_test(buffer_test)
+add_mymuduo_test(thread_pool_test)
+add_mymuduo_test(event_loop_thread_test)
+add_mymuduo_test(tcp_server_test)
+
+if(MYMUDUO_BUILD_HTTP)
+    add_executable(http_context_test http_context_test.cc)
+    target_link_libraries(http_context_test PRIVATE mymuduo::http)
+    add_test(NAME http_context_test COMMAND http_context_test)
+endif()

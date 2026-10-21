@@ -41,7 +41,7 @@ TcpClient::TcpClient(EventLoop* loop,
     // 设置连接器的新连接回调函数
     connector_->setNewConnectionCallback(
         std::bind(&TcpClient::newConnection, this, _1));
-    
+
     LOG_INFO << "TcpClient::TcpClient[" << name_
              << "] - connector " << get_pointer(connector_);
 }
@@ -49,15 +49,15 @@ TcpClient::TcpClient(EventLoop* loop,
 TcpClient::~TcpClient() {
     LOG_INFO << "TcpClient::~TcpClient[" << name_
              << "] - connector " << get_pointer(connector_);
-    
+
     TcpConnectionPtr conn;
     bool unique = false;
     {
         std::lock_guard<std::mutex> lock(mutex_);
-        unique = connection_.unique();
+        unique = connection_.use_count() == 1;
         conn = connection_;
     }
-    
+
     if (conn) {
         // 重置连接的回调函数
         CloseCallback cb = std::bind(&detail::removeConnection,
@@ -97,16 +97,17 @@ void TcpClient::stop() {
 
 void TcpClient::newConnection(int sockfd) {
     loop_->assertInLoopThread();
-    
+
     struct sockaddr_in peeraddr;
     ::memset(&peeraddr, 0, sizeof peeraddr);
     socklen_t addrlen = static_cast<socklen_t>(sizeof peeraddr);
     if (::getpeername(sockfd, reinterpret_cast<struct sockaddr*>(&peeraddr), &addrlen) < 0) {
         LOG_ERROR << "TcpClient::newConnection - getpeername failed";
+        sockets::close(sockfd);
         return;
     }
     InetAddress peerAddr(peeraddr);
-    
+
     char buf[32];
     snprintf(buf, sizeof buf, ":%s#%d", peerAddr.toIpPort().c_str(), nextConnId_);
     ++nextConnId_;
@@ -117,10 +118,11 @@ void TcpClient::newConnection(int sockfd) {
     addrlen = static_cast<socklen_t>(sizeof localaddr);
     if (::getsockname(sockfd, reinterpret_cast<struct sockaddr*>(&localaddr), &addrlen) < 0) {
         LOG_ERROR << "TcpClient::newConnection - getsockname failed";
+        sockets::close(sockfd);
         return;
     }
     InetAddress localAddr(localaddr);
-    
+
     // 创建TcpConnection对象
     TcpConnectionPtr conn(new TcpConnection(loop_,
                                           connName,
@@ -133,7 +135,7 @@ void TcpClient::newConnection(int sockfd) {
     conn->setWriteCompleteCallback(writeCompleteCallback_);
     conn->setCloseCallback(
         std::bind(&TcpClient::removeConnection, this, _1));
-    
+
     {
         std::lock_guard<std::mutex> lock(mutex_);
         connection_ = conn;
@@ -153,7 +155,7 @@ void TcpClient::removeConnection(const TcpConnectionPtr& conn) {
 
     loop_->queueInLoop(
         std::bind(&TcpConnection::connectDestroyed, conn));
-    
+
     if (retry_ && connect_) {
         LOG_INFO << "TcpClient::connect[" << name_ << "] - Reconnecting to "
                  << connector_->serverAddress().toIpPort();
@@ -164,5 +166,5 @@ void TcpClient::removeConnection(const TcpConnectionPtr& conn) {
 } // namespace net
 } // namespace mymuduo
 
- 
+
 

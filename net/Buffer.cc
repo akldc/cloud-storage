@@ -33,12 +33,12 @@ ssize_t Buffer::readFd(int fd, int* savedErrno) {
         *savedErrno = errno;
     } else if (static_cast<size_t>(n) <= writable) {
         // 数据完全写入Buffer中
-        writerIndex_ += n;
+        writerIndex_ += static_cast<size_t>(n);
     } else {
         // Buffer写满了，额外的数据写入了extrabuf，需要append
         writerIndex_ = buffer_.size();
-        append(extrabuf, n - writable);
+        append(extrabuf, static_cast<size_t>(n) - writable);
     }
 
     return n;
-} 
+}

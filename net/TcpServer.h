@@ -41,18 +41,18 @@ public:
               const InetAddress& listenAddr,
               const std::string& nameArg,
               Option option = kNoReusePort);
-    
+
     ~TcpServer();
 
     // 设置线程初始化回调函数
     void setThreadInitCallback(const ThreadInitCallback& cb) { threadInitCallback_ = cb; }
-    
+
     // 设置连接回调函数
     void setConnectionCallback(const ConnectionCallback& cb) { connectionCallback_ = cb; }
-    
+
     // 设置消息回调函数
     void setMessageCallback(const MessageCallback& cb) { messageCallback_ = cb; }
-    
+
     // 设置写完成回调函数
     void setWriteCompleteCallback(const WriteCompleteCallback& cb) { writeCompleteCallback_ = cb; }
 
@@ -71,13 +71,16 @@ public:
     // 获取主机名
     const std::string& ipPort() const { return ipPort_; }
 
+    /// bind后实际监听端口；构造时传入0可由内核选择空闲端口。
+    uint16_t port() const { return acceptor_->listenAddress().port(); }
+
 private:
     // 新连接到来时的回调函数
     void newConnection(int sockfd, const InetAddress& peerAddr);
-    
+
     // 移除连接的回调函数
     void removeConnection(const TcpConnectionPtr& conn);
-    
+
     // 在IO线程中移除连接
     void removeConnectionInLoop(const TcpConnectionPtr& conn);
 
@@ -88,16 +91,16 @@ private:
     const std::string name_;                   // 服务器名称
     std::unique_ptr<Acceptor> acceptor_;       // 接收器
     std::shared_ptr<EventLoopThreadPool> threadPool_; // 线程池
-    
+
     ConnectionCallback connectionCallback_;     // 连接回调
     MessageCallback messageCallback_;           // 消息回调
     WriteCompleteCallback writeCompleteCallback_; // 写完成回调
     ThreadInitCallback threadInitCallback_;     // 线程初始化回调
-    
+
     std::atomic_bool started_;                 // 服务器是否已启动
     int nextConnId_;                           // 下一个连接ID
     ConnectionMap connections_;                 // 连接表
 };
 
 }  // namespace net
-}  // namespace mymuduo 
+}  // namespace mymuduo

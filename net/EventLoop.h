@@ -10,13 +10,13 @@
 #include "base/Timestamp.h"
 #include "base/noncopyable.h"
 #include "Callbacks.h"
+#include "TimerId.h"
 
 namespace mymuduo {
 namespace net {
 
 class Channel;
 class Poller;
-class TimerId;
 class TimerQueue;
 
 /// @brief 事件循环类
@@ -102,4 +102,4 @@ private:
 }  // namespace net
 }  // namespace mymuduo
 
-#endif  // MYMUDUO_NET_EVENTLOOP_H 
+#endif  // MYMUDUO_NET_EVENTLOOP_H

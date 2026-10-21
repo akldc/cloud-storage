@@ -1,160 +1,52 @@
-# 1 MyMuduo网络库实现Web文件管理
-实现muduo网络库，然后基于他做二次开发
+# mymuduo network foundation
 
-# 2 目录结构
-```
-mymuduo/
-├── base/           # 基础设施
-├── net/            # 网络核心
-│   ├── poller/     # IO复用
-│   ├── http/       # HTTP协议实现
-├── application/    # 项目代码
-``` 
+一个面向 Linux 的 C++17 Reactor 网络基础库。核心使用 epoll、eventfd 和 timerfd，提供线程、日志、事件循环、定时器、非阻塞 TCP 与可选 HTTP/1.x 协议层。
 
-# 3 制作网页图标
-convert logo.png  -define icon:auto-resize=256 favicon.ico
+当前仓库只承担后续 Storage Node 的网络基础能力。Coordinator 将独立使用 gRPC + Protobuf，不依赖本库。原 Web 文件管理系统已移入 `legacy/file_manager/`，默认不参与构建。
 
-# 3 项目编译和运行
-## 3.1 导入数据库
+## 目录
 
-```
-// 进入项目目录
-cd lesson29_file_manager
-// 使用用户名 密码导入数据库
-mysql -u username -ppassword < file_manager.sql
-``` 
-比如我username是root，password是123456，即是
-```
-mysql -u root -p123456 < file_manager.sql
-
+```text
+base/                 线程、同步、时间和日志
+net/                  Reactor、TCP、Buffer、定时器
+examples/             Echo Server
+tests/                基础回归测试
+legacy/file_manager/  原文件管理业务、页面和 SQL（仅供参考）
 ```
 
-数据库的详细设计参考以下内容：
+HTTP 源码暂保留在 `net/` 中，但构建为独立的 `mymuduo_http`，TCP 核心库 `mymuduo_net` 不依赖 HTTP。
 
-1. 用户表(users)
-2. 会话表(sessions)
-3. 文件表(files)
-4. 文件分享表(file_shares)
+## 构建与测试
 
-以下是完整的SQL语句：
+要求 Linux、CMake 3.16+ 和支持 C++17 的编译器。
 
-```sql
--- 创建数据库
-CREATE DATABASE IF NOT EXISTS file_manager DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-
-USE file_manager;
-
--- 创建用户表
-CREATE TABLE IF NOT EXISTS users (
-    id INT PRIMARY KEY AUTO_INCREMENT,
-    username VARCHAR(50) NOT NULL UNIQUE,
-    password VARCHAR(64) NOT NULL,
-    email VARCHAR(100),
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    INDEX idx_username (username)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- 创建会话表
-CREATE TABLE IF NOT EXISTS sessions (
-    id INT PRIMARY KEY AUTO_INCREMENT,
-    session_id VARCHAR(32) NOT NULL UNIQUE,
-    user_id INT NOT NULL,
-    username VARCHAR(50) NOT NULL,
-    expire_time TIMESTAMP NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    INDEX idx_session_id (session_id),
-    INDEX idx_user_id (user_id),
-    INDEX idx_expire_time (expire_time),
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- 创建文件表
-CREATE TABLE IF NOT EXISTS files (
-    id INT PRIMARY KEY AUTO_INCREMENT,
-    filename VARCHAR(255) NOT NULL,
-    original_filename VARCHAR(255) NOT NULL,
-    file_size BIGINT UNSIGNED NOT NULL,
-    file_type VARCHAR(50),
-    user_id INT NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    INDEX idx_filename (filename),
-    INDEX idx_user_id (user_id),
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- 创建文件分享表
-CREATE TABLE IF NOT EXISTS file_shares (
-    id INT PRIMARY KEY AUTO_INCREMENT,
-    file_id INT NOT NULL,
-    owner_id INT NOT NULL,
-    shared_with_id INT,
-    share_type ENUM('private', 'public', 'protected', 'user') NOT NULL,
-    share_code VARCHAR(32) NOT NULL,
-    expire_time TIMESTAMP NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    extract_code VARCHAR(6),
-    INDEX idx_file_id (file_id),
-    INDEX idx_owner_id (owner_id),
-    INDEX idx_shared_with_id (shared_with_id),
-    INDEX idx_share_code (share_code),
-    INDEX idx_expire_time (expire_time),
-    FOREIGN KEY (file_id) REFERENCES files(id) ON DELETE CASCADE,
-    FOREIGN KEY (owner_id) REFERENCES users(id) ON DELETE CASCADE,
-    FOREIGN KEY (shared_with_id) REFERENCES users(id) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
+```bash
+cmake -S . -B build \
+  -DMYMUDUO_BUILD_HTTP=ON \
+  -DMYMUDUO_BUILD_EXAMPLES=ON \
+  -DMYMUDUO_BUILD_TESTS=ON
+cmake --build build -j
+ctest --test-dir build --output-on-failure
 ```
 
-这个SQL脚本包含了以下主要功能：
+运行 Echo Server：
 
-1. 创建数据库和所有必要的表
-2. 设置适当的字符集(utf8mb4)和排序规则(utf8mb4_unicode_ci)
-3. 为每个表创建必要的索引以提高查询性能
-4. 设置外键约束以确保数据完整性
-5. 创建触发器自动清理过期的会话和分享记录
-
-表结构说明：
-
-1. `users` 表：
-   - 存储用户基本信息
-   - 包含用户名、密码(哈希后)、邮箱等字段
-   - 用户名设置为唯一索引
-
-2. `sessions` 表：
-   - 存储用户会话信息
-   - 包含会话ID、用户ID、过期时间等字段
-   - 设置了多个索引以提高查询效率
-
-3. `files` 表：
-   - 存储文件信息
-   - 包含文件名、原始文件名、文件大小、文件类型等字段
-   - 与用户表关联
-
-4. `file_shares` 表：
-   - 存储文件分享信息
-   - 支持多种分享类型(私有、公开、受保护、指定用户)
-   - 包含分享码、提取码、过期时间等字段
-   - 与文件和用户表关联
-
-你可以直接执行这个SQL脚本来创建完整的数据库结构。需要注意的是，执行前请确保：
-
-1. MySQL服务已经启动
-2. 有足够的权限创建数据库和表
-3. 如果数据库已存在，建议先备份数据
-
-如果你需要修改任何表结构或添加新的功能，请告诉我。
-       
-
-
-## 3.2 编译和运行
+```bash
+./build/bin/echo_server 2007
 ```
-cd lesson29_file_manager
-mkdir build
-cd build
-cmake ..
-make
-运行：
-./bin/http_upload
+
+仅构建 TCP 基础库：
+
+```bash
+cmake -S . -B build-core \
+  -DMYMUDUO_BUILD_HTTP=OFF \
+  -DMYMUDUO_BUILD_EXAMPLES=OFF \
+  -DMYMUDUO_BUILD_TESTS=OFF
+cmake --build build-core -j
 ```
+
+旧文件管理程序默认关闭。若只为参考而尝试构建，可设置 `MYMUDUO_BUILD_LEGACY_FILE_MANAGER=ON`，并自行准备 MySQL client、nlohmann/json 和旧业务运行环境；它不属于当前核心库的兼容性保证范围。
+
+架构审查、修复记录和后续使用边界见 [PROJECT_ARCHITECTURE.md](PROJECT_ARCHITECTURE.md)。
+
+分布式对象存储的第一阶段设计见 [docs/object_storage_phase1_design.md](docs/object_storage_phase1_design.md)。

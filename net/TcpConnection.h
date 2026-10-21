@@ -21,7 +21,7 @@ class Socket;
 
 /**
  * @brief TCP连接类，用于表示一个TCP连接
- * 
+ *
  * TcpConnection是muduo网络库中最重要的类之一，它表示一个已建立的TCP连接。
  * 它管理连接的生命周期，处理数据的收发，并提供丰富的回调接口。
  */
@@ -41,7 +41,7 @@ public:
                  int sockfd,
                  const InetAddress& localAddr,
                  const InetAddress& peerAddr);
-    
+
     /**
      * @brief 析构函数
      */
@@ -51,27 +51,27 @@ public:
      * @brief 获取所属的事件循环
      */
     EventLoop* getLoop() const { return loop_; }
-    
+
     /**
      * @brief 获取连接名字
      */
     const string& name() const { return name_; }
-    
+
     /**
      * @brief 获取本地地址
      */
     const InetAddress& localAddress() const { return localAddr_; }
-    
+
     /**
      * @brief 获取对端地址
      */
     const InetAddress& peerAddress() const { return peerAddr_; }
-    
+
     /**
      * @brief 检查连接是否已建立
      */
     bool connected() const { return state_ == kConnected; }
-    
+
     /**
      * @brief 检查连接是否已断开
      */
@@ -100,7 +100,7 @@ public:
      * 当TCP连接完成时由TcpServer调用
      */
     void connectEstablished();
-    
+
     /**
      * @brief 连接销毁
      * 当TCP连接关闭时由TcpServer调用
@@ -130,7 +130,7 @@ public:
      * @brief 获取输入缓冲区
      */
     Buffer* inputBuffer() { return &inputBuffer_; }
-    
+
     /**
      * @brief 获取输出缓冲区
      */
@@ -155,8 +155,6 @@ private:
     EventLoop* loop_;          // 所属的事件循环
     const string name_;        // 连接名字
     std::atomic<StateE> state_;  // 连接状态
-    bool reading_;            // 是否正在读取数据
-
     std::unique_ptr<Socket> socket_;  // Socket对象
     std::unique_ptr<Channel> channel_;  // Channel对象
     const InetAddress localAddr_;  // 本地地址
@@ -181,4 +179,4 @@ private:
 } // namespace net
 } // namespace mymuduo
 
-#endif // MYMUDUO_NET_TCPCONNECTION_H 
+#endif // MYMUDUO_NET_TCPCONNECTION_H
