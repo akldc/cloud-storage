@@ -1,7 +1,6 @@
 #ifndef MYMUDUO_NET_TIMERID_H
 #define MYMUDUO_NET_TIMERID_H
 
-#include "base/copyable.h"
 
 namespace mymuduo {
 namespace net {
@@ -11,7 +10,7 @@ class Timer;
 ///
 /// An opaque identifier, for canceling Timer.
 ///
-class TimerId : public mymuduo::copyable {
+class TimerId {
 public:
     TimerId()
         : timer_(nullptr),
@@ -35,4 +34,4 @@ private:
 }  // namespace net
 }  // namespace mymuduo
 
-#endif  // MYMUDUO_NET_TIMERID_H 
+#endif  // MYMUDUO_NET_TIMERID_H

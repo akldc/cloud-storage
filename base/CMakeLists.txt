@@ -3,11 +3,9 @@ set(base_SRCS
     Date.cc
     TimeZone.cc
     Exception.cc
-    Condition.cc
     CurrentThread.cc
     LogStream.cc
     Logging.cc
-    Thread.cc
     CountDownLatch.cc
     ProcessInfo.cc
     FileUtil.cc
@@ -19,25 +17,14 @@ set(base_SRCS
 set(base_HEADERS
     Version.h
     Types.h
-    copyable.h
-    noncopyable.h
     StringPiece.h
     Timestamp.h
     Date.h
     TimeZone.h
     Exception.h
-    Atomic.h
-    BlockingQueue.h
-    BoundedBlockingQueue.h
-    Mutex.h
-    Condition.h
-    Singleton.h
-    ThreadLocal.h
-    ThreadLocalSingleton.h
     CurrentThread.h
     LogStream.h
     Logging.h
-    Thread.h
     CountDownLatch.h
     ThreadPool.h
     WeakCallback.h

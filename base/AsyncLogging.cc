@@ -2,6 +2,7 @@
 #include "LogFile.h"
 #include "Timestamp.h"
 
+#include <chrono>
 #include <stdio.h>
 
 using namespace mymuduo;
@@ -13,10 +14,10 @@ AsyncLogging::AsyncLogging(const string& basename,
       running_(false),
       basename_(basename),
       rollSize_(rollSize),
-      thread_(std::bind(&AsyncLogging::threadFunc, this), "Logging"),
+      thread_(),
       latch_(1),
       mutex_(),
-      cond_(mutex_),
+      cond_(),
       currentBuffer_(new Buffer),
       nextBuffer_(new Buffer),
       buffers_()
@@ -28,7 +29,7 @@ AsyncLogging::AsyncLogging(const string& basename,
 
 void AsyncLogging::append(const char* logline, int len)
 {
-    mymuduo::MutexLockGuard lock(mutex_);
+    std::lock_guard<std::mutex> lock(mutex_);
     if (currentBuffer_->avail() > len)
     {
         currentBuffer_->append(logline, len);
@@ -46,7 +47,7 @@ void AsyncLogging::append(const char* logline, int len)
             currentBuffer_.reset(new Buffer); // Rarely happens
         }
         currentBuffer_->append(logline, len);
-        cond_.notify();
+        cond_.notify_one();
     }
 }
 
@@ -61,17 +62,18 @@ void AsyncLogging::threadFunc()
     newBuffer2->bzero();
     BufferVector buffersToWrite;
     buffersToWrite.reserve(16);
-    while (running_)
+    while (true)
     {
         assert(newBuffer1 && newBuffer1->length() == 0);
         assert(newBuffer2 && newBuffer2->length() == 0);
         assert(buffersToWrite.empty());
 
         {
-            mymuduo::MutexLockGuard lock(mutex_);
+            std::unique_lock<std::mutex> lock(mutex_);
             if (buffers_.empty())  // unusual usage!
             {
-                cond_.waitForSeconds(flushInterval_);
+                cond_.wait_for(lock, std::chrono::seconds(flushInterval_),
+                               [this] { return !buffers_.empty() || !running_; });
             }
             buffers_.push_back(std::move(currentBuffer_));
             currentBuffer_ = std::move(newBuffer1);
@@ -125,6 +127,11 @@ void AsyncLogging::threadFunc()
 
         buffersToWrite.clear();
         output.flush();
+
+        if (!running_)
+        {
+            break;
+        }
     }
     output.flush();
-} 
+}

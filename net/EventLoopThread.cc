@@ -1,13 +1,14 @@
 #include "EventLoopThread.h"
 #include "EventLoop.h"
 
+#include <cassert>
+
 using namespace mymuduo;
 using namespace mymuduo::net;
 
-EventLoopThread::EventLoopThread(const ThreadInitCallback& cb,
-                               const std::string& name)
+EventLoopThread::EventLoopThread(const ThreadInitCallback& cb)
     : loop_(nullptr)
-    , thread_(std::bind(&EventLoopThread::threadFunc, this), name)
+    , thread_()
     , mutex_()
     , cond_()
     , callback_(cb) {
@@ -22,14 +23,14 @@ EventLoopThread::~EventLoopThread() {
             loop_->quit();
         }
     }
-    if (thread_.started() && !thread_.joined()) {
+    if (thread_.joinable()) {
         thread_.join();
     }
 }
 
 EventLoop* EventLoopThread::startLoop() {
-    // 启动新线程
-    thread_.start();
+    assert(!thread_.joinable());
+    thread_ = std::thread(&EventLoopThread::threadFunc, this);
 
     EventLoop* loop = nullptr;
     {

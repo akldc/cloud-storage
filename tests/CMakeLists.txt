@@ -7,6 +7,7 @@ endfunction()
 
 add_mymuduo_test(buffer_test)
 add_mymuduo_test(thread_pool_test)
+add_mymuduo_test(count_down_latch_test)
 add_mymuduo_test(event_loop_thread_test)
 add_mymuduo_test(tcp_server_test)
 

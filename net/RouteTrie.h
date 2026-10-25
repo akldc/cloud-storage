@@ -6,7 +6,6 @@
 #include <map>
 #include <memory>
 #include <unordered_map>
-#include "base/copyable.h"
 
 namespace mymuduo {
 namespace net {
@@ -29,7 +28,7 @@ public:
 };
 
 // Trie树路由实现
-class RouteTrie : public mymuduo::copyable {
+class RouteTrie {
 public:
     RouteTrie() : root_(std::make_shared<TrieNode>()) {}
     

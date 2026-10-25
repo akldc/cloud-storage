@@ -1,7 +1,6 @@
 #ifndef MYMUDUO_BASE_TIMEZONE_H
 #define MYMUDUO_BASE_TIMEZONE_H
 
-#include "copyable.h"
 #include <memory>
 #include <time.h>
 
@@ -9,7 +8,7 @@ namespace mymuduo
 {
 
 // TimeZone for 1970~2030
-class TimeZone : public copyable
+class TimeZone
 {
 public:
     TimeZone() = default;  // 无效的时区
@@ -37,4 +36,4 @@ private:
 
 }  // namespace mymuduo
 
-#endif  // MYMUDUO_BASE_TIMEZONE_H 
+#endif  // MYMUDUO_BASE_TIMEZONE_H

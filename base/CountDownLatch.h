@@ -1,9 +1,8 @@
 #ifndef MYMUDUO_BASE_COUNTDOWNLATCH_H
 #define MYMUDUO_BASE_COUNTDOWNLATCH_H
 
-#include "Condition.h"
-#include "Mutex.h"
-#include "noncopyable.h"
+#include <condition_variable>
+#include <mutex>
 
 namespace mymuduo
 {
@@ -16,7 +15,7 @@ namespace mymuduo
  * 2. 可以用于等待多个线程完成某个事件
  * 3. 基于条件变量和互斥锁实现
  */
-class CountDownLatch : noncopyable
+class CountDownLatch
 {
 public:
     /**
@@ -24,6 +23,8 @@ public:
      * @param count 初始计数值
      */
     explicit CountDownLatch(int count);
+    CountDownLatch(const CountDownLatch&) = delete;
+    CountDownLatch& operator=(const CountDownLatch&) = delete;
 
     /**
      * @brief 等待计数值变为0
@@ -41,11 +42,11 @@ public:
     int getCount() const;
 
 private:
-    mutable MutexLock mutex_;  // 互斥锁
-    Condition condition_;      // 条件变量
+    mutable std::mutex mutex_;
+    std::condition_variable condition_;
     int count_;               // 计数值
 };
 
 } // namespace mymuduo
 
-#endif // MYMUDUO_BASE_COUNTDOWNLATCH_H 
+#endif // MYMUDUO_BASE_COUNTDOWNLATCH_H

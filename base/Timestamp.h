@@ -1,7 +1,6 @@
 #ifndef MYMUDUO_BASE_TIMESTAMP_H
 #define MYMUDUO_BASE_TIMESTAMP_H
 
-#include "copyable.h"
 #include "Types.h"
 
 #include <string>
@@ -11,7 +10,7 @@ namespace mymuduo
 
 /// @brief 时间戳类，精确到微秒
 /// 内部使用64位整数表示从Unix纪元开始的微秒数
-class Timestamp : public copyable
+class Timestamp
 {
 public:
     /// @brief 构造一个表示Unix纪元时间的Timestamp
@@ -99,4 +98,4 @@ inline Timestamp addTime(Timestamp timestamp, double seconds)
 
 }  // namespace mymuduo
 
-#endif  // MYMUDUO_BASE_TIMESTAMP_H 
+#endif  // MYMUDUO_BASE_TIMESTAMP_H

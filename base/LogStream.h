@@ -1,7 +1,6 @@
 #ifndef MYMUDUO_BASE_LOGSTREAM_H
 #define MYMUDUO_BASE_LOGSTREAM_H
 
-#include "noncopyable.h"
 #include "StringPiece.h"
 #include <assert.h>
 #include <string.h> // memcpy
@@ -17,10 +16,12 @@ const int kSmallBuffer = 4000;
 const int kLargeBuffer = 4000*1000;
 
 template<int SIZE>
-class FixedBuffer : noncopyable
+class FixedBuffer
 {
 public:
     FixedBuffer() : cur_(data_) {}
+    FixedBuffer(const FixedBuffer&) = delete;
+    FixedBuffer& operator=(const FixedBuffer&) = delete;
 
     void append(const char* buf, size_t len)
     {
@@ -49,11 +50,15 @@ private:
 
 } // namespace detail
 
-class LogStream : noncopyable
+class LogStream
 {
     typedef LogStream self;
 public:
     typedef detail::FixedBuffer<detail::kSmallBuffer> Buffer;
+
+    LogStream() = default;
+    LogStream(const LogStream&) = delete;
+    LogStream& operator=(const LogStream&) = delete;
 
     self& operator<<(bool v)
     {
@@ -158,4 +163,4 @@ inline LogStream& operator<<(LogStream& s, const Fmt& fmt)
 
 }  // namespace mymuduo
 
-#endif  // MYMUDUO_BASE_LOGSTREAM_H 
+#endif  // MYMUDUO_BASE_LOGSTREAM_H

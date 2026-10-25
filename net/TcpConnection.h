@@ -1,7 +1,6 @@
 #ifndef MYMUDUO_NET_TCPCONNECTION_H
 #define MYMUDUO_NET_TCPCONNECTION_H
 
-#include "../base/noncopyable.h"
 #include "../base/StringPiece.h"
 #include "../base/Types.h"
 #include "Callbacks.h"
@@ -25,8 +24,7 @@ class Socket;
  * TcpConnection是muduo网络库中最重要的类之一，它表示一个已建立的TCP连接。
  * 它管理连接的生命周期，处理数据的收发，并提供丰富的回调接口。
  */
-class TcpConnection : noncopyable,
-                     public std::enable_shared_from_this<TcpConnection> {
+class TcpConnection : public std::enable_shared_from_this<TcpConnection> {
 public:
     /**
      * @brief 构造函数
@@ -46,6 +44,8 @@ public:
      * @brief 析构函数
      */
     ~TcpConnection();
+    TcpConnection(const TcpConnection&) = delete;
+    TcpConnection& operator=(const TcpConnection&) = delete;
 
     /**
      * @brief 获取所属的事件循环

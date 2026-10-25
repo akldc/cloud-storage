@@ -1,15 +1,14 @@
 #ifndef MYMUDUO_BASE_THREADPOOL_H
 #define MYMUDUO_BASE_THREADPOOL_H
 
-#include "Condition.h"
-#include "Mutex.h"
-#include "Thread.h"
 #include "Types.h"
 
+#include <condition_variable>
 #include <deque>
-#include <vector>
-#include <memory>
 #include <functional>
+#include <mutex>
+#include <thread>
+#include <vector>
 
 namespace mymuduo
 {
@@ -23,7 +22,7 @@ namespace mymuduo
  * 3. 支持优雅关闭
  * 4. 支持自定义任务类型
  */
-class ThreadPool : noncopyable
+class ThreadPool
 {
 public:
     // 任务函数类型
@@ -32,22 +31,17 @@ public:
     /**
      * @brief 构造函数
      * @param nameArg 线程池名称
-     * @param maxSize 最大线程数
      */
     explicit ThreadPool(const string& nameArg = string("ThreadPool"));
     ~ThreadPool();
-
-    /**
-     * @brief 设置线程池大小并启动
-     * @param numThreads 线程数量
-     */
-    void setThreadSize(int numThreads) { threadSize_ = numThreads; }
+    ThreadPool(const ThreadPool&) = delete;
+    ThreadPool& operator=(const ThreadPool&) = delete;
 
     /**
      * @brief 设置最大队列大小
      * @param maxSize 最大队列大小
      */
-    void setMaxQueueSize(size_t maxSize) { maxQueueSize_ = maxSize; }
+    void setMaxQueueSize(size_t maxSize);
 
     /**
      * @brief 启动线程池
@@ -95,17 +89,17 @@ private:
     /**
      * @brief 互斥锁
      */
-    mutable MutexLock mutex_;
+    mutable std::mutex mutex_;
 
     /**
      * @brief 条件变量，用于任务队列非空条件
      */
-    Condition notEmpty_;
+    std::condition_variable notEmpty_;
 
     /**
      * @brief 条件变量，用于任务队列非满条件
      */
-    Condition notFull_;
+    std::condition_variable notFull_;
 
     /**
      * @brief 线程池是否运行标志
@@ -118,11 +112,6 @@ private:
     size_t maxQueueSize_;
 
     /**
-     * @brief 线程池大小
-     */
-    int threadSize_;
-
-    /**
      * @brief 任务队列
      */
     std::deque<Task> queue_;
@@ -130,9 +119,9 @@ private:
     /**
      * @brief 线程列表
      */
-    std::vector<std::unique_ptr<Thread>> threads_;
+    std::vector<std::thread> threads_;
 };
 
 } // namespace mymuduo
 
-#endif // MYMUDUO_BASE_THREADPOOL_H 
+#endif // MYMUDUO_BASE_THREADPOOL_H

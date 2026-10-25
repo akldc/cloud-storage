@@ -12,7 +12,6 @@
 #include <memory>
 #include <atomic>
 
-#include "base/noncopyable.h"
 #include "InetAddress.h"
 #include "TimerId.h"
 
@@ -27,8 +26,7 @@ class EventLoop;
 /// 使用非阻塞连接 + Channel实现
 /// 支持自动重连和连接超时
 ///
-class Connector : noncopyable,
-                 public std::enable_shared_from_this<Connector> {
+class Connector : public std::enable_shared_from_this<Connector> {
 public:
     // 新连接回调函数类型
     // 参数: 成功建立连接的socket文件描述符
@@ -39,6 +37,8 @@ public:
     // serverAddr: 服务器地址
     Connector(EventLoop* loop, const InetAddress& serverAddr);
     ~Connector();
+    Connector(const Connector&) = delete;
+    Connector& operator=(const Connector&) = delete;
 
     // 设置新连接回调函数
     void setNewConnectionCallback(const NewConnectionCallback& cb) {

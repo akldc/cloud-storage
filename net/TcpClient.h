@@ -3,7 +3,6 @@
 
 #include "net/TcpConnection.h"
 #include "net/Connector.h"
-#include "base/noncopyable.h"
 
 #include <memory>
 #include <mutex>
@@ -20,12 +19,14 @@ using ConnectorPtr = std::shared_ptr<Connector>;
 ///
 /// TCP client类
 ///
-class TcpClient : noncopyable {
+class TcpClient {
 public:
     TcpClient(EventLoop* loop,
               const InetAddress& serverAddr,
               const std::string& nameArg);
     ~TcpClient();  // 强制内联以避免虚表
+    TcpClient(const TcpClient&) = delete;
+    TcpClient& operator=(const TcpClient&) = delete;
 
     void connect();    // 连接服务器
     void disconnect(); // 断开连接
@@ -83,4 +84,4 @@ private:
 } // namespace net
 } // namespace mymuduo
 
-#endif  // MYMUDUO_NET_TCPCLIENT_H 
+#endif  // MYMUDUO_NET_TCPCLIENT_H

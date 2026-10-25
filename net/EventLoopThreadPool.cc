@@ -2,7 +2,6 @@
 #include "EventLoopThread.h"
 #include "EventLoop.h"
 
-#include <stdio.h>
 #include <assert.h>
 
 using namespace mymuduo;
@@ -33,11 +32,9 @@ void EventLoopThreadPool::start(const ThreadInitCallback& cb) {
 
     // 创建numThreads_个线程
     for (int i = 0; i < numThreads_; ++i) {
-        char buf[name_.size() + 32];
-        snprintf(buf, sizeof buf, "%s%d", name_.c_str(), i);
-        EventLoopThread* t = new EventLoopThread(cb, buf);
-        threads_.push_back(std::unique_ptr<EventLoopThread>(t));
-        loops_.push_back(t->startLoop());  // 启动EventLoopThread，返回其EventLoop指针
+        auto thread = std::make_unique<EventLoopThread>(cb);
+        loops_.push_back(thread->startLoop());
+        threads_.push_back(std::move(thread));
     }
 
     // 如果numThreads_为0，则在baseLoop_线程中调用cb
@@ -66,6 +63,7 @@ void EventLoopThreadPool::stop() {
 
 EventLoop* EventLoopThreadPool::getNextLoop() {
     assert(started_);
+    assert(baseLoop_->isInLoopThread());
     EventLoop* loop = baseLoop_;
 
     // 如果有其他线程，则采用round-robin方式分配
@@ -82,9 +80,10 @@ EventLoop* EventLoopThreadPool::getNextLoop() {
 
 std::vector<EventLoop*> EventLoopThreadPool::getAllLoops() {
     assert(started_);
+    assert(baseLoop_->isInLoopThread());
     if (loops_.empty()) {
         return std::vector<EventLoop*>(1, baseLoop_);
     } else {
         return loops_;
     }
-} 
+}

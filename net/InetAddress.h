@@ -1,7 +1,6 @@
 #ifndef MYMUDUO_NET_INETADDRESS_H
 #define MYMUDUO_NET_INETADDRESS_H
 
-#include "base/copyable.h"
 #include "base/StringPiece.h"
 
 #include <netinet/in.h>
@@ -21,7 +20,7 @@ typedef const std::string& StringArg;
 /// Wrapper of sockaddr_in.
 ///
 /// This is an POD interface class.
-class InetAddress : public copyable {
+class InetAddress {
 public:
     /// Constructs an endpoint with given port number.
     /// Mostly used in TcpServer listening.
@@ -73,4 +72,4 @@ private:
 } // namespace net
 } // namespace mymuduo
 
-#endif  // MYMUDUO_NET_INETADDRESS_H 
+#endif  // MYMUDUO_NET_INETADDRESS_H

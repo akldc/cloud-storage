@@ -1,13 +1,10 @@
 #ifndef MYMUDUO_NET_EVENTLOOPTHREAD_H
 #define MYMUDUO_NET_EVENTLOOPTHREAD_H
 
-#include "base/noncopyable.h"
-#include "base/Thread.h"
-
+#include <condition_variable>
 #include <functional>
 #include <mutex>
-#include <condition_variable>
-#include <string>
+#include <thread>
 
 namespace mymuduo {
 namespace net {
@@ -20,24 +17,21 @@ class EventLoop;
  * 该类用于创建一个新线程，并在该线程中运行事件循环。
  * 主要用于IO线程池中，每个IO线程都包含一个EventLoop。
  */
-class EventLoopThread : noncopyable {
+class EventLoopThread {
 public:
     // 线程初始化回调函数类型
     using ThreadInitCallback = std::function<void(EventLoop*)>;
 
-    /**
-     * @brief 构造函数
-     * @param cb 线程初始化回调函数
-     * @param name 线程名称
-     */
-    EventLoopThread(const ThreadInitCallback& cb = ThreadInitCallback(),
-                   const std::string& name = std::string());
+    explicit EventLoopThread(
+        const ThreadInitCallback& cb = ThreadInitCallback());
 
     /**
      * @brief 析构函数
      * 如果线程还在运行，会等待线程退出
      */
     ~EventLoopThread();
+    EventLoopThread(const EventLoopThread&) = delete;
+    EventLoopThread& operator=(const EventLoopThread&) = delete;
 
     /**
      * @brief 启动线程并返回其EventLoop对象
@@ -58,7 +52,7 @@ private:
     void threadFunc();
 
     EventLoop* loop_;        // loop_指针指向一个EventLoop对象（和subLoop是一个概念）
-    Thread thread_;         // 线程对象
+    std::thread thread_;
     std::mutex mutex_;      // 互斥锁
     std::condition_variable cond_;  // 条件变量
     ThreadInitCallback callback_;   // 回调函数

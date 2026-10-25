@@ -2,7 +2,6 @@
 
 #include "Buffer.h"
 #include "HttpRequest.h"
-#include "base/copyable.h"
 #include "base/Timestamp.h"
 #include <memory>
 #include <unordered_map>
@@ -10,7 +9,7 @@
 namespace mymuduo {
 namespace net {
 
-class HttpContext : public mymuduo::copyable
+class HttpContext
 {
  public:
   enum HttpRequestParseState

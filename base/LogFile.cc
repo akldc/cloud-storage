@@ -18,7 +18,7 @@ LogFile::LogFile(const string& basename,
       flushInterval_(flushInterval),
       checkEveryN_(checkEveryN),
       count_(0),
-      mutex_(threadSafe ? new MutexLock : NULL),
+      mutex_(threadSafe ? new std::mutex : nullptr),
       startOfPeriod_(0),
       lastRoll_(0),
       lastFlush_(0)
@@ -33,7 +33,7 @@ void LogFile::append(const char* logline, int len)
 {
     if (mutex_)
     {
-        MutexLockGuard lock(*mutex_);
+        std::lock_guard<std::mutex> lock(*mutex_);
         append_unlocked(logline, len);
     }
     else
@@ -46,7 +46,7 @@ void LogFile::flush()
 {
     if (mutex_)
     {
-        MutexLockGuard lock(*mutex_);
+        std::lock_guard<std::mutex> lock(*mutex_);
         file_->flush();
     }
     else
@@ -123,4 +123,4 @@ string LogFile::getLogFileName(const string& basename, time_t* now)
     filename += ".log";
 
     return filename;
-} 
+}

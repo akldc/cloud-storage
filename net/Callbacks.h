@@ -25,6 +25,7 @@ inline T* get_pointer(const std::unique_ptr<T>& ptr) {
 namespace net {
 class TcpConnection;
 typedef std::shared_ptr<TcpConnection> TcpConnectionPtr;
+// 公共回调接口
 // All client visible callbacks go here.
 using TimerCallback = std::function<void()>;
 using ConnectionCallback = std::function<void(const TcpConnectionPtr&)>;

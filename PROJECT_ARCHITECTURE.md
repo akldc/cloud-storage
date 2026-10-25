@@ -12,9 +12,16 @@
 
 ### `base`：保留
 
-通用组件包括 `Thread`、`ThreadPool`、锁与条件变量、`CountDownLatch`、时间戳、日志和文件工具。它们不依赖文件管理业务，可作为网络层及 Storage Node 后台任务的基础设施。
+通用组件包括基于 C++17 标准库的 `ThreadPool`、`CountDownLatch`、时间戳、日志和文件工具。线程、互斥量和条件变量在使用点直接采用 `std::thread`、`std::mutex` 和 `std::condition_variable`，不再保留 pthread 风格的重复封装。
 
 `ThreadPool` 适合阻塞磁盘任务或计算任务，但任务完成后若要操作连接，应通过 `TcpConnection::send` 或 `EventLoop::queueInLoop` 回到连接所属 I/O Loop。不要在多个线程直接修改同一个 `Buffer`。
+
+当前 `base` 边界如下：
+
+- 网络核心直接依赖：`CurrentThread`、`Timestamp`、`Logging`、类型与回调辅助。
+- Storage Node 后台任务可直接使用：`ThreadPool`、`CountDownLatch`。
+- 可选运行支撑：`AsyncLogging`、`LogFile`、`FileUtil`、日期时区和进程信息工具。这些与 Reactor 无耦合，但体量较小，本次保留。
+- 已删除：无核心使用点的阻塞队列、旧原子整数、TLS/Singleton 工具以及 pthread 风格线程/同步包装。
 
 ### `net` TCP Reactor：保留
 
@@ -67,6 +74,7 @@ HTTP 解析器支持请求行、请求头、`Content-Length` 请求体和 keep-a
 10. Connector 的跨线程启动、停止和 Channel 重置任务持有自身；TcpClient 地址查询失败时不再泄漏 fd。
 11. HTTP 解析移除了非 NUL 结尾缓冲区的字符串日志读取；严格校验 `Content-Length`，拒绝冲突长度以及 chunked 与 Content-Length 混用。
 12. HTTP 头查询改为大小写不敏感，响应默认生成 `Content-Length`，并支持同一输入缓冲中的顺序请求。
+13. 基础并发组件改为在使用点直接采用 C++17 标准库；删除无实际依赖的 pthread 风格 `Thread`、`MutexLock`、`Condition`、旧原子类、阻塞队列和 TLS/Singleton 包装。`CountDownLatch` 保留语义并改用标准同步原语实现；不可拷贝类直接声明拷贝构造和拷贝赋值为 `= delete`，同时删除无行为的 `noncopyable`/`copyable` 标记基类。
 
 ## 4. 构建边界
 
@@ -90,6 +98,7 @@ CMake 导出别名为 `mymuduo::base`、`mymuduo::net` 和可选的 `mymuduo::ht
 
 - `buffer_test`：追加、消费、整理/扩容和 fd 读取。
 - `thread_pool_test`：并发任务执行以及停止时排空队列。
+- `count_down_latch_test`：多线程就绪、阻塞、统一释放和计数归零。
 - `event_loop_thread_test`：从其他线程投递任务、eventfd 唤醒和 Loop 退出。
 - `tcp_server_test`：动态端口监听、24 个并发客户端、连接建立、跨线程 Echo 发送、完整收发和主动断开。
 - `http_context_test`：增量请求体、大小写不敏感头、非法 Content-Length 和不支持的 chunked 请求。

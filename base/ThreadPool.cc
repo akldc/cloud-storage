@@ -9,113 +9,115 @@ using namespace mymuduo;
 ThreadPool::ThreadPool(const string& nameArg)
     : name_(nameArg),
       mutex_(),
-      notEmpty_(mutex_),
-      notFull_(mutex_),
+      notEmpty_(),
+      notFull_(),
       running_(false),
-      maxQueueSize_(0),
-      threadSize_(0)
+      maxQueueSize_(0)
 {
 }
 
 ThreadPool::~ThreadPool()
 {
-    if (running_)
-    {
-        stop();
-    }
+    stop();
 }
 
 void ThreadPool::start(int numThreads)
 {
-    assert(!running_);
     assert(numThreads >= 0);
+    std::lock_guard<std::mutex> lock(mutex_);
+    assert(!running_);
+    assert(threads_.empty());
     running_ = true;
-    threadSize_ = numThreads;
-    // 创建线程
-    threads_.reserve(static_cast<size_t>(threadSize_));
-    for (int i = 0; i < threadSize_; ++i)
+    threads_.reserve(static_cast<size_t>(numThreads));
+    for (int i = 0; i < numThreads; ++i)
     {
-        char id[32];
-        snprintf(id, sizeof id, "%d", i+1);
-        threads_.emplace_back(new Thread(
-            std::bind(&ThreadPool::runInThread, this),
-            name_+id
-        ));
-        threads_[static_cast<size_t>(i)]->start();
+        threads_.emplace_back(&ThreadPool::runInThread, this);
     }
+}
 
+void ThreadPool::setMaxQueueSize(size_t maxSize)
+{
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        maxQueueSize_ = maxSize;
+    }
+    notFull_.notify_all();
 }
 
 void ThreadPool::stop()
 {
     {
-        MutexLockGuard lock(mutex_);
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (!running_ && threads_.empty()) {
+            return;
+        }
         running_ = false;
-        notEmpty_.notifyAll();
-        notFull_.notifyAll();
     }
+    notEmpty_.notify_all();
+    notFull_.notify_all();
 
     for (auto& thr : threads_)
     {
-        thr->join();
+        assert(thr.get_id() != std::this_thread::get_id());
+        if (thr.joinable()) {
+            thr.join();
+        }
     }
+    threads_.clear();
 }
 
 size_t ThreadPool::queueSize() const
 {
-    MutexLockGuard lock(mutex_);
+    std::lock_guard<std::mutex> lock(mutex_);
     return queue_.size();
 }
 
 void ThreadPool::run(Task task)
 {
+    if (!task) {
+        return;
+    }
+
+    std::unique_lock<std::mutex> lock(mutex_);
+    if (!running_) {
+        return;
+    }
+
     if (threads_.empty())
     {
-        bool runInline = false;
-        {
-            MutexLockGuard lock(mutex_);
-            runInline = running_;
-        }
-        if (runInline && task)
-        {
-            task();
-        }
+        lock.unlock();
+        task();
     }
     else
     {
-        // 加锁，将任务添加到任务队列
-        MutexLockGuard lock(mutex_);
-        while (isFull() && running_)
-        {
-            notFull_.wait();
-        }
+        notFull_.wait(lock, [this] { return !isFull() || !running_; });
 
-        if (!running_) return;
+        if (!running_) {
+            return;
+        }
 
         assert(!isFull());
 
         queue_.push_back(std::move(task));
-        notEmpty_.notify();
+        lock.unlock();
+        notEmpty_.notify_one();
     }
 }
 
 ThreadPool::Task ThreadPool::take()
 {
-    MutexLockGuard lock(mutex_);
-    // 等待任务队列非空
-    while (queue_.empty() && running_)
-    {
-        notEmpty_.wait();
-    }
+    std::unique_lock<std::mutex> lock(mutex_);
+    notEmpty_.wait(lock, [this] { return !queue_.empty() || !running_; });
 
     Task task;
     if (!queue_.empty())
     {
-        task = queue_.front();
+        task = std::move(queue_.front());
         queue_.pop_front();
         if (maxQueueSize_ > 0)
         {
-            notFull_.notify();
+            lock.unlock();
+            notFull_.notify_one();
         }
     }
 
@@ -158,5 +160,6 @@ void ThreadPool::runInThread()
 
 bool ThreadPool::isFull() const
 {
+    // mutex_ must be held by the caller.
     return maxQueueSize_ > 0 && queue_.size() >= maxQueueSize_;
 }

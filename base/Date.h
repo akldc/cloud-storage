@@ -2,7 +2,6 @@
 #define MYMUDUO_BASE_DATE_H
 
 #include "Types.h"
-#include "copyable.h"
 
 struct tm;
 
@@ -10,7 +9,7 @@ namespace mymuduo
 {
 
 /// @brief 日期类，用于处理年月日
-class Date : public copyable
+class Date
 {
 public:
     struct YearMonthDay
@@ -67,4 +66,4 @@ inline bool operator==(Date lhs, Date rhs)
 
 }  // namespace mymuduo
 
-#endif  // MYMUDUO_BASE_DATE_H 
+#endif  // MYMUDUO_BASE_DATE_H

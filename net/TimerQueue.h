@@ -4,7 +4,6 @@
 #include <set>
 #include <vector>
 
-#include "base/Mutex.h"
 #include "base/Timestamp.h"
 #include "Callbacks.h"
 #include "Channel.h"
@@ -20,10 +19,12 @@ class TimerId;
 /// A best efforts timer queue.
 /// No guarantee that the callback will be on time.
 ///
-class TimerQueue : noncopyable {
+class TimerQueue {
 public:
     explicit TimerQueue(EventLoop* loop);
     ~TimerQueue();
+    TimerQueue(const TimerQueue&) = delete;
+    TimerQueue& operator=(const TimerQueue&) = delete;
 
     ///
     /// Schedules the callback to be run at given time,
@@ -71,4 +72,4 @@ private:
 }  // namespace net
 }  // namespace mymuduo
 
-#endif  // MYMUDUO_NET_TIMERQUEUE_H 
+#endif  // MYMUDUO_NET_TIMERQUEUE_H

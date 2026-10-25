@@ -1,7 +1,6 @@
 #ifndef MYMUDUO_BASE_FILEUTIL_H
 #define MYMUDUO_BASE_FILEUTIL_H
 
-#include "noncopyable.h"
 #include "StringPiece.h"
 #include "Types.h"
 #include <sys/types.h>
@@ -39,11 +38,13 @@ bool readFile(StringArg filename,
  * @brief 文件读取类
  * RAII方式管理文件描述符
  */
-class ReadSmallFile : noncopyable
+class ReadSmallFile
 {
 public:
     ReadSmallFile(StringArg filename);
     ~ReadSmallFile();
+    ReadSmallFile(const ReadSmallFile&) = delete;
+    ReadSmallFile& operator=(const ReadSmallFile&) = delete;
 
     /**
      * @brief 读取文件内容到buffer
@@ -76,11 +77,13 @@ private:
  * RAII方式管理文件描述符
  * 支持按大小滚动日志文件
  */
-class AppendFile : noncopyable
+class AppendFile
 {
 public:
     explicit AppendFile(StringArg filename);
     ~AppendFile();
+    AppendFile(const AppendFile&) = delete;
+    AppendFile& operator=(const AppendFile&) = delete;
 
     /**
      * @brief 追加写入数据
@@ -114,4 +117,4 @@ private:
 
 }  // namespace mymuduo
 
-#endif  // MYMUDUO_BASE_FILEUTIL_H 
+#endif  // MYMUDUO_BASE_FILEUTIL_H

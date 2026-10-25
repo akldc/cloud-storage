@@ -4,7 +4,6 @@
 #include <atomic>
 #include <functional>
 #include "base/Timestamp.h"
-#include "base/noncopyable.h"
 
 namespace mymuduo {
 namespace net {
@@ -12,7 +11,7 @@ namespace net {
 ///
 /// Internal class for timer management.
 /// 
-class Timer : noncopyable {
+class Timer {
 public:
     using TimerCallback = std::function<void()>;
 
@@ -23,6 +22,8 @@ public:
           repeat_(interval > 0.0),
           sequence_(s_numCreated_.fetch_add(1)) {
     }
+    Timer(const Timer&) = delete;
+    Timer& operator=(const Timer&) = delete;
 
     void run() const { callback_(); }
 
@@ -47,4 +48,4 @@ private:
 }  // namespace net
 }  // namespace mymuduo
 
-#endif  // MYMUDUO_NET_TIMER_H 
+#endif  // MYMUDUO_NET_TIMER_H

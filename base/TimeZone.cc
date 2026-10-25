@@ -1,6 +1,5 @@
 #include "TimeZone.h"
 #include "Date.h"
-#include "noncopyable.h"
 
 #include <string.h>
 #include <string>
@@ -170,4 +169,4 @@ time_t TimeZone::fromUtcTime(const struct tm& utc)
     return seconds;
 }
 
-}  // namespace mymuduo 
+}  // namespace mymuduo

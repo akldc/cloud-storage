@@ -8,7 +8,6 @@
 #include <mutex>
 #include "base/CurrentThread.h"
 #include "base/Timestamp.h"
-#include "base/noncopyable.h"
 #include "Callbacks.h"
 #include "TimerId.h"
 
@@ -22,12 +21,14 @@ class TimerQueue;
 /// @brief 事件循环类
 /// 每个线程只能有一个EventLoop对象
 /// 负责IO和定时器事件的分发
-class EventLoop : noncopyable {
+class EventLoop {
 public:
     using Functor = std::function<void()>;
 
     EventLoop();
     ~EventLoop();
+    EventLoop(const EventLoop&) = delete;
+    EventLoop& operator=(const EventLoop&) = delete;
 
     /// @brief 开启事件循环
     void loop();

@@ -3,7 +3,6 @@
 #include "net/EventLoop.h"
 #include "net/Acceptor.h"
 #include "net/InetAddress.h"
-#include "base/noncopyable.h"
 #include "net/EventLoopThreadPool.h"
 #include "net/Callbacks.h"
 #include "net/TcpConnection.h"
@@ -19,7 +18,7 @@ namespace mymuduo {
 namespace net {
 
 // TCP服务器类
-class TcpServer : noncopyable
+class TcpServer
 {
 public:
     using ThreadInitCallback = std::function<void(EventLoop*)>;
@@ -43,6 +42,8 @@ public:
               Option option = kNoReusePort);
 
     ~TcpServer();
+    TcpServer(const TcpServer&) = delete;
+    TcpServer& operator=(const TcpServer&) = delete;
 
     // 设置线程初始化回调函数
     void setThreadInitCallback(const ThreadInitCallback& cb) { threadInitCallback_ = cb; }

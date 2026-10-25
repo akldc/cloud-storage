@@ -8,11 +8,10 @@
 #include <cstdio>
 #include <strings.h>
 #include <assert.h>
-#include "base/copyable.h"
 #include "base/Timestamp.h"
 namespace mymuduo {
 namespace net {
-class HttpRequest : public mymuduo::copyable
+class HttpRequest
 {
  public:
   enum Method

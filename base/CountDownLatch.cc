@@ -1,38 +1,36 @@
 #include "CountDownLatch.h"
 
+#include <cassert>
+
 namespace mymuduo
 {
 
 CountDownLatch::CountDownLatch(int count)
     : mutex_(),
-      condition_(mutex_),
       count_(count)
 {
+    assert(count >= 0);
 }
 
 void CountDownLatch::wait()
 {
-    MutexLockGuard lock(mutex_);
-    while (count_ > 0)
-    {
-        condition_.wait();
-    }
+    std::unique_lock<std::mutex> lock(mutex_);
+    condition_.wait(lock, [this] { return count_ == 0; });
 }
 
 void CountDownLatch::countDown()
 {
-    MutexLockGuard lock(mutex_);
-    --count_;
-    if (count_ == 0)
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (count_ > 0 && --count_ == 0)
     {
-        condition_.notifyAll();
+        condition_.notify_all();
     }
 }
 
 int CountDownLatch::getCount() const
 {
-    MutexLockGuard lock(mutex_);
+    std::lock_guard<std::mutex> lock(mutex_);
     return count_;
 }
 
-} // namespace mymuduo 
+} // namespace mymuduo

@@ -1,14 +1,12 @@
 #ifndef MYMUDUO_NET_EVENTLOOPTHREADPOOL_H
 #define MYMUDUO_NET_EVENTLOOPTHREADPOOL_H
 
-#include "base/noncopyable.h"
 #include "base/Types.h"
 
 #include <functional>
 #include <memory>
 #include <vector>
 #include <string>
-#include <atomic>
 
 namespace mymuduo {
 namespace net {
@@ -24,13 +22,13 @@ class EventLoopThread;
  * 而IO线程池中的线程负责处理已建立连接的IO事件。
  * 
  * 特点：
- * 1. 支持动态调整线程数量
+ * 1. 启动前配置固定 I/O 线程数量
  * 2. Round-robin方式分配连接
  * 3. 支持线程初始化回调
  * 4. 支持优雅关闭
- * 5. 线程安全的设计
+ * 5. 管理操作由 base EventLoop 线程执行
  */
-class EventLoopThreadPool : noncopyable {
+class EventLoopThreadPool {
 public:
     using ThreadInitCallback = std::function<void(EventLoop*)>;
 
@@ -46,6 +44,8 @@ public:
      * 会等待所有线程安全退出
      */
     ~EventLoopThreadPool();
+    EventLoopThreadPool(const EventLoopThreadPool&) = delete;
+    EventLoopThreadPool& operator=(const EventLoopThreadPool&) = delete;
 
     /**
      * @brief 设置线程数量
@@ -102,7 +102,7 @@ private:
     string name_;               // 线程池名称
     bool started_;             // 是否已启动
     int numThreads_;           // 线程数量
-    std::atomic<int> next_;    // 下一个要被分配的线程索引
+    int next_;                 // 仅在 base EventLoop 线程中访问
     std::vector<std::unique_ptr<EventLoopThread>> threads_;  // IO线程列表
     std::vector<EventLoop*> loops_;                          // EventLoop列表
 };
@@ -110,4 +110,4 @@ private:
 } // namespace net
 } // namespace mymuduo
 
-#endif // MYMUDUO_NET_EVENTLOOPTHREADPOOL_H 
+#endif // MYMUDUO_NET_EVENTLOOPTHREADPOOL_H

@@ -1,9 +1,9 @@
 #ifndef MYMUDUO_BASE_LOGFILE_H
 #define MYMUDUO_BASE_LOGFILE_H
 
-#include "Mutex.h"
 #include "Types.h"
 #include <memory>
+#include <mutex>
 
 namespace mymuduo
 {
@@ -22,7 +22,7 @@ class AppendFile;
  * 3. 支持按时间刷新
  * 4. 支持自动压缩
  */
-class LogFile : noncopyable
+class LogFile
 {
 public:
     /**
@@ -39,6 +39,8 @@ public:
             int flushInterval = 3,
             int checkEveryN = 1024);
     ~LogFile();
+    LogFile(const LogFile&) = delete;
+    LogFile& operator=(const LogFile&) = delete;
 
     /**
      * @brief 追加日志
@@ -75,7 +77,7 @@ private:
 
     int count_;                     // 计数器
 
-    std::unique_ptr<MutexLock> mutex_;  // 互斥锁
+    std::unique_ptr<std::mutex> mutex_;
     time_t startOfPeriod_;          // 开始记录的时间
     time_t lastRoll_;               // 上次滚动时间
     time_t lastFlush_;              // 上次刷新时间
@@ -86,4 +88,4 @@ private:
 
 } // namespace mymuduo
 
-#endif // MYMUDUO_BASE_LOGFILE_H 
+#endif // MYMUDUO_BASE_LOGFILE_H

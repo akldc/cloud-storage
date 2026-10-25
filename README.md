@@ -50,3 +50,5 @@ cmake --build build-core -j
 架构审查、修复记录和后续使用边界见 [PROJECT_ARCHITECTURE.md](PROJECT_ARCHITECTURE.md)。
 
 分布式对象存储的第一阶段设计见 [docs/object_storage_phase1_design.md](docs/object_storage_phase1_design.md)。
+
+现有 Reactor/TCP/HTTP 源码的分层导览和推荐阅读顺序见 [NETWORK_FRAMEWORK_GUIDE.md](NETWORK_FRAMEWORK_GUIDE.md)。

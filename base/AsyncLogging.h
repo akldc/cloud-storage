@@ -1,14 +1,14 @@
 #ifndef MYMUDUO_BASE_ASYNCLOGGING_H
 #define MYMUDUO_BASE_ASYNCLOGGING_H
 
-#include "BlockingQueue.h"
-#include "BoundedBlockingQueue.h"
 #include "CountDownLatch.h"
-#include "Mutex.h"
-#include "Thread.h"
 #include "LogStream.h"
+#include "Types.h"
 
 #include <atomic>
+#include <condition_variable>
+#include <mutex>
+#include <thread>
 #include <vector>
 
 namespace mymuduo
@@ -23,7 +23,7 @@ namespace mymuduo
  * 3. 支持多线程
  * 4. 自动滚动日志文件
  */
-class AsyncLogging : noncopyable
+class AsyncLogging
 {
 public:
     /**
@@ -35,6 +35,8 @@ public:
     AsyncLogging(const string& basename,
                 off_t rollSize,
                 int flushInterval = 3);
+    AsyncLogging(const AsyncLogging&) = delete;
+    AsyncLogging& operator=(const AsyncLogging&) = delete;
     ~AsyncLogging()
     {
         if (running_)
@@ -53,8 +55,11 @@ public:
      */
     void start()
     {
-        running_ = true;
-        thread_.start();
+        bool expected = false;
+        if (!running_.compare_exchange_strong(expected, true)) {
+            return;
+        }
+        thread_ = std::thread(&AsyncLogging::threadFunc, this);
         latch_.wait();
     }
 
@@ -63,9 +68,13 @@ public:
      */
     void stop()
     {
-        running_ = false;
-        cond_.notify();
-        thread_.join();
+        if (!running_.exchange(false)) {
+            return;
+        }
+        cond_.notify_one();
+        if (thread_.joinable()) {
+            thread_.join();
+        }
     }
 
 private:
@@ -82,10 +91,10 @@ private:
     std::atomic<bool> running_;      // 运行标志
     const string basename_;          // 日志文件基本名
     const off_t rollSize_;          // 滚动大小
-    mymuduo::Thread thread_;        // 后端线程
+    std::thread thread_;
     mymuduo::CountDownLatch latch_; // 用于等待线程启动
-    mymuduo::MutexLock mutex_;      // 互斥锁
-    mymuduo::Condition cond_;       // 条件变量
+    std::mutex mutex_;
+    std::condition_variable cond_;
     BufferPtr currentBuffer_;       // 当前缓冲区
     BufferPtr nextBuffer_;          // 预备缓冲区
     BufferVector buffers_;          // 待写入文件的缓冲区列表
@@ -93,4 +102,4 @@ private:
 
 } // namespace mymuduo
 
-#endif // MYMUDUO_BASE_ASYNCLOGGING_H 
+#endif // MYMUDUO_BASE_ASYNCLOGGING_H

@@ -10,7 +10,6 @@
 
 #include <functional>
 
-#include "base/noncopyable.h"
 #include "Channel.h"
 #include "Socket.h"
 
@@ -25,7 +24,7 @@ class InetAddress;
 /// 使用非阻塞socket + Channel实现
 /// 支持优雅关闭和防止文件描述符耗尽
 ///
-class Acceptor : noncopyable {
+class Acceptor {
 public:
     // 新连接回调函数类型
     // 参数1: 新连接的文件描述符
@@ -38,6 +37,8 @@ public:
     // reuseport: 是否启用端口复用
     Acceptor(EventLoop* loop, const InetAddress& listenAddr, bool reuseport);
     ~Acceptor();
+    Acceptor(const Acceptor&) = delete;
+    Acceptor& operator=(const Acceptor&) = delete;
 
     // 设置新连接回调函数
     // 当有新连接到达时会调用此回调函数

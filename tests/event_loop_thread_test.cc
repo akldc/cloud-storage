@@ -20,4 +20,9 @@ int main()
         loop->quit();
     });
     assert(future.wait_for(std::chrono::seconds(2)) == std::future_status::ready);
+
+    {
+        mymuduo::net::EventLoopThread ownedLoopThread;
+        assert(ownedLoopThread.startLoop() != nullptr);
+    }
 }
