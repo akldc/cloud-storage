@@ -33,7 +33,7 @@ Channel::~Channel() {
 
 void Channel::update() {
     addedToLoop_ = true;
-    loop_->updateChannel(this);
+    loop_->updateChannel(this);  // 通知 EventLoop 更新注册信息。
 }
 
 void Channel::remove() {
@@ -57,6 +57,13 @@ void Channel::handleEvent(Timestamp receiveTime) {
         handleEventWithGuard(receiveTime);
     }
 }
+
+/*
+POLLHUP：表示挂断相关事件，但代码只有在同时没有 POLLIN 时才调用关闭回调。如果同时存在可读事件，仍可能需要读取剩余数据。
+POLLERR：表示发生错误相关事件，代码会尝试调用错误回调。
+POLLNVAL：通常表示 fd 无效，例如文件描述符没有被正确打开或已不再有效。
+POLLRDHUP：表示对端关闭了连接的写方向，是 Linux 常用的半关闭检测标志。
+*/
 
 void Channel::handleEventWithGuard(Timestamp receiveTime) {
     eventHandling_ = true;

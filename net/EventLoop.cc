@@ -17,6 +17,7 @@ using namespace mymuduo::net;
 
 namespace {
 thread_local EventLoop* t_loopInThisThread = nullptr;
+// 每个线程只能有一个EventLoop对象，t_loopInThisThread用于记录当前线程的EventLoop对象
 
 const int kPollTimeMs = 10000;
 
@@ -83,7 +84,7 @@ void EventLoop::loop() {
         eventHandling_ = true;
         for (Channel* channel : activeChannels_) {
             currentActiveChannel_ = channel;
-            currentActiveChannel_->handleEvent(pollReturnTime_);
+            currentActiveChannel_->handleEvent(pollReturnTime_);  // 每个活跃的Channel执行自己的回调
         }
         currentActiveChannel_ = nullptr;
         eventHandling_ = false;
@@ -120,6 +121,8 @@ void EventLoop::queueInLoop(Functor cb) {
     }
 }
 
+
+// 通过向wakeupFd_写入数据来唤醒EventLoop所在的线程，从而让它处理新的回调函数
 void EventLoop::wakeup() {
     uint64_t one = 1;
     ssize_t n = ::write(wakeupFd_, &one, sizeof one);

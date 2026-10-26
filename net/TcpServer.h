@@ -77,6 +77,7 @@ public:
 
 private:
     // 新连接到来时的回调函数
+    // 从 Acceptor 收到新的客户端 socket 后，选择一个 EventLoop，创建 TcpConnection 并存入连接表, 然后配置回调
     void newConnection(int sockfd, const InetAddress& peerAddr);
 
     // 移除连接的回调函数

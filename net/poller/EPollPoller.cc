@@ -43,7 +43,7 @@ Timestamp EPollPoller::poll(int timeoutMs, ChannelList* activeChannels) {
     LOG_TRACE << "fd total count " << channels_.size();
 
     int numEvents = ::epoll_wait(epollfd_,
-                               &*events_.begin(),
+                               events_.data(),
                                static_cast<int>(events_.size()),
                                timeoutMs);
     int savedErrno = errno;
@@ -68,6 +68,7 @@ Timestamp EPollPoller::poll(int timeoutMs, ChannelList* activeChannels) {
     return now;
 }
 
+// 将事件转换成channel
 void EPollPoller::fillActiveChannels(int numEvents,
                                    ChannelList* activeChannels) const {
     assert(implicit_cast<size_t>(numEvents) <= events_.size());
@@ -79,8 +80,8 @@ void EPollPoller::fillActiveChannels(int numEvents,
         assert(it != channels_.end());
         assert(it->second == channel);
 #endif
-        channel->set_revents(events_[i].events);
-        activeChannels->push_back(channel);
+        channel->set_revents(events_[i].events);  // 将实际发生的事件交给 Channel
+        activeChannels->push_back(channel);  // activeChannels: epoll_wait返回的存在事件的Channel列表
     }
 }
 
@@ -142,7 +143,7 @@ void EPollPoller::update(int operation, Channel* channel) {
     struct epoll_event event;
     memset(&event, 0, sizeof event);
     event.events = channel->events();
-    event.data.ptr = channel;
+    event.data.ptr = channel;   // 将Channel指针存储在epoll_event的data.ptr中，以便在事件发生时可以获取到对应的Channel对象
     int fd = channel->fd();
     LOG_TRACE << "epoll_ctl op = " << operationToString(operation)
              << " fd = " << fd << " event = { " << channel->eventsToString() << " }";

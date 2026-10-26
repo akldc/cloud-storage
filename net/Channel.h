@@ -92,12 +92,12 @@ private:
     static const int kWriteEvent;  // 写事件
 
     EventLoop* loop_;              // 所属的EventLoop
-    const int fd_;                 // 文件描述符
-    int events_;                   // 注册的事件
-    int revents_;                  // 实际发生的事件
-    int index_;                    // 用于Poller
+    const int fd_;                 // 文件描述符,观察但不拥有它
+    int events_;                   // 注册的事件,希望监听的事件
+    int revents_;                  // 实际发生的事件，Poller返回的事件
+    int index_;                    // 用于Poller，表示当前Channel的状态（kNew, kAdded, kDeleted）
 
-    bool eventHandling_;           // 是否正在处理事件
+    bool eventHandling_;           // 标记是否正在处理事件
     bool addedToLoop_;            // 是否已添加到EventLoop
     bool logHup_;                 // 是否记录POLLHUP事件
 
@@ -106,7 +106,7 @@ private:
     EventCallback closeCallback_;       // 关闭事件回调
     EventCallback errorCallback_;       // 错误事件回调
 
-    std::weak_ptr<void> tie_;     // 用于延长所属对象的生命期
+    std::weak_ptr<void> tie_;     // 用于延长所属对象的生命期   因为上层对象通常也持有 Channel，如果用shared_ptr，则会导致循环引用，无法释放
     bool tied_;                   // 是否已经绑定
 };
 

@@ -183,9 +183,11 @@ Channel::update
   -> epoll_ctl
 ```
 
-`tie()` 很重要。Channel 的回调通常保存所属对象的裸 `this`；事件触发时先把 weak pointer 提升为 shared pointer，可避免回调执行期间 `TcpConnection` 被析构。
+**`tie()` 很重要。Channel 的回调通常保存所属对象的裸 `this`；事件触发时先把 weak pointer 提升为 shared pointer，可避免回调执行期间 `TcpConnection` 被析构。**
 
-Channel 不关闭 fd，也不决定业务行为，只负责把事件翻译成相应回调。
+**Channel 不关闭 fd，也不决定业务行为，只负责把事件翻译成相应回调。**
+
+
 
 ## 7. Poller 与 EPollPoller
 

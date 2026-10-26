@@ -87,7 +87,7 @@ public:
         return static_cast<const char*>(eol);
     }
 
-    /// @brief 读取len个字节
+    /// @brief 消费数据，读取len个字节
     void retrieve(size_t len) {
         assert(len <= readableBytes());
         if (len < readableBytes()) {
@@ -182,9 +182,11 @@ public:
     ssize_t readFd(int fd, int* savedErrno);
 
 private:
-    char* begin() { return &*buffer_.begin(); }
-    const char* begin() const { return &*buffer_.begin(); }
+    char* begin() { return buffer_.data(); }  // 获取首地址，返回char*类型
+    const char* begin() const { return buffer_.data(); }
 
+    // 扩容
+    // 优先复用已有内存（移动有效数据到前面），如果空间不足则扩容
     void makeSpace(size_t len) {
         if (writableBytes() + prependableBytes() < len + kCheapPrepend) {
             buffer_.resize(writerIndex_+len);
@@ -202,8 +204,8 @@ private:
 
 private:
     std::vector<char> buffer_;  // 缓冲区
-    size_t readerIndex_;        // 读位置
-    size_t writerIndex_;        // 写位置
+    size_t readerIndex_;        // 第一个尚未消费的字节位置
+    size_t writerIndex_;        // 下一个可写字节位置
 
     static const char kCRLF[];  // CRLF字符
 };

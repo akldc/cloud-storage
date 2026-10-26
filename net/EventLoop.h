@@ -71,6 +71,7 @@ public:
     static EventLoop* getEventLoopOfCurrentThread();
 
     // timers
+    // 下面三个函数用于定时器事件的注册和取消
     TimerId runAt(Timestamp time, TimerCallback cb);
     TimerId runAfter(double delay, TimerCallback cb);
     TimerId runEvery(double interval, TimerCallback cb);
@@ -90,14 +91,16 @@ private:
     std::atomic<bool> callingPendingFunctors_;   // atomic flag
     const pid_t threadId_;                       // 当前对象所属线程ID
     Timestamp pollReturnTime_;                   // poll返回时间
-    std::unique_ptr<Poller> poller_;            // IO multiplexing
+    std::unique_ptr<Poller> poller_;            // IO multiplexing   Poller描述符**
     std::unique_ptr<TimerQueue> timerQueue_;    // 定时器队列
+
     int wakeupFd_;                              // 用于唤醒loop所属线程
-    std::unique_ptr<Channel> wakeupChannel_;    // 用于处理wakeupFd_上的事件
+    std::unique_ptr<Channel> wakeupChannel_;    // 醒后处理wakeupFd_上的事件
+
     Channel* currentActiveChannel_;             // 当前正在处理的活动通道
-    ChannelList activeChannels_;                // Poller返回的活动通道
+    ChannelList activeChannels_;                // Poller返回的活动通道**
     std::mutex mutex_;                          // 互斥锁，用于保护pendingFunctors_
-    std::vector<Functor> pendingFunctors_;      // 待处理的回调函数
+    std::vector<Functor> pendingFunctors_;      // 待处理的回调函数,保存需要在 EventLoop 线程执行的任务
 };
 
 }  // namespace net

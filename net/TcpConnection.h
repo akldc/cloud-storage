@@ -156,7 +156,7 @@ private:
     const string name_;        // 连接名字
     std::atomic<StateE> state_;  // 连接状态
     std::unique_ptr<Socket> socket_;  // Socket对象
-    std::unique_ptr<Channel> channel_;  // Channel对象
+    std::unique_ptr<Channel> channel_;  // Channel对象，管理socket的事件和回调
     const InetAddress localAddr_;  // 本地地址
     const InetAddress peerAddr_;   // 对端地址
 
@@ -165,7 +165,7 @@ private:
     WriteCompleteCallback writeCompleteCallback_;  // 数据发送完成回调
     HighWaterMarkCallback highWaterMarkCallback_;  // 高水位回调
     CloseCallback closeCallback_;               // 连接关闭回调
-    size_t highWaterMark_;                     // 高水位标记
+    size_t highWaterMark_;                     // 高水位标记,默认64MB
 
     Buffer inputBuffer_;   // 输入缓冲区
     Buffer outputBuffer_;  // 输出缓冲区
