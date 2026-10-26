@@ -18,7 +18,8 @@ HTTP 源码暂保留在 `net/` 中，但构建为独立的 `mymuduo_http`，TCP 
 
 ## 构建与测试
 
-要求 Linux、CMake 3.16+ 和支持 C++17 的编译器。
+要求 Linux、CMake 3.16+、支持 C++17 的编译器，以及 OpenSSL `libcrypto`
+开发包（用于 Chunk 的 SHA-256 校验）。
 
 ```bash
 cmake -S . -B build \

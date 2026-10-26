@@ -11,6 +11,11 @@ add_mymuduo_test(count_down_latch_test)
 add_mymuduo_test(event_loop_thread_test)
 add_mymuduo_test(tcp_server_test)
 
+add_executable(chunk_store_test storage/chunk_store_test.cc)
+target_link_libraries(chunk_store_test PRIVATE object_store::chunk_store)
+add_test(NAME chunk_store_test COMMAND chunk_store_test)
+set_tests_properties(chunk_store_test PROPERTIES TIMEOUT 30)
+
 if(MYMUDUO_BUILD_HTTP)
     add_executable(http_context_test http_context_test.cc)
     target_link_libraries(http_context_test PRIVATE mymuduo::http)

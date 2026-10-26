@@ -242,7 +242,8 @@ Chunk ID 不复用是避免“延迟删除新数据”的第一道保证，gener
 
 ### 4.6 启动恢复
 
-`Recover()` 在开始对外服务前完成轻量扫描：
+`Initialize()` 在开始对外服务前调用内部恢复流程并完成轻量扫描；恢复流程不作为
+运行期公共接口，避免与正在进行的读写并发：
 
 - `chunks/`：校验目录名、meta 可解析、data 存在且大小一致；异常项移入 `quarantine/`，不自动当成健康副本。
 - `staging/`：解析 `upload.meta`，根据 `durable_bytes` 截断或回退 `data.part`；未过期项恢复为可续传状态，过期项移入 trash。
@@ -256,39 +257,49 @@ Chunk ID 不复用是避免“延迟删除新数据”的第一道保证，gener
 下面是接口形态而非最终代码。返回值应使用轻量 `Status/Result<T>`，不要用异常表达预期的冲突、偏移不匹配或不存在。
 
 ```cpp
+struct AppendResult {
+    Status status;
+    uint64_t expected_offset;  // 当前 Writer 下一次连续追加的位置
+    uint64_t durable_offset;   // 进程中断后可安全恢复的位置
+};
+
 class ChunkWriter {
 public:
-    virtual Result<uint64_t> Append(uint64_t offset,
-                                    const void* data,
-                                    size_t length) = 0;
-    virtual Status Checkpoint() = 0;
-    virtual Result<ChunkDescriptor> Commit() = 0;
-    virtual Status Abort() = 0;
-    virtual uint64_t durableBytes() const = 0;
-    virtual ~ChunkWriter() = default;
+    AppendResult Append(uint64_t offset,
+                        const void* data,
+                        size_t length);
+    Status Checkpoint();
+    Result<ChunkDescriptor> Commit();
+    Status Abort();
+    uint64_t receivedBytes() const;
+    uint64_t durableBytes() const;
 };
 
 class ChunkReader {
 public:
-    virtual Result<size_t> ReadAt(uint64_t offset,
-                                  void* output,
-                                  size_t length) = 0;
-    virtual const ChunkDescriptor& descriptor() const = 0;
-    virtual ~ChunkReader() = default;
+    // offset 相对于 OpenRead 时指定的 ByteRange。
+    Result<size_t> ReadAt(uint64_t offset,
+                          void* output,
+                          size_t length);
+    const ChunkDescriptor& descriptor() const;
+    const ByteRange& range() const;
+    uint64_t length() const;
 };
 
 class ChunkStore {
 public:
+    // 创建目录并执行一次启动恢复；重复调用返回首次恢复报告。
+    Result<RecoveryReport> Initialize();
     Result<std::unique_ptr<ChunkWriter>> BeginWrite(
         const BeginChunkWrite& request);
     Result<std::unique_ptr<ChunkWriter>> ResumeWrite(
         const ResumeChunkWrite& request);
     Result<ChunkStat> Stat(const ChunkKey& key) const;
+    Result<std::unique_ptr<ChunkReader>> OpenRead(const ChunkKey& key) const;
     Result<std::unique_ptr<ChunkReader>> OpenRead(
-        const ChunkKey& key, const ByteRange& range) const;
+        const ChunkKey& key, const ByteRange& exact_range) const;
     Status Delete(const ChunkKey& key);
-    Result<VerifyResult> Verify(const ChunkKey& key, VerifyMode mode);
-    Result<RecoveryReport> Recover();
+    Result<VerifyResult> Verify(const ChunkKey& key);
 };
 ```
 
@@ -296,7 +307,14 @@ public:
 
 - `ChunkKey = {chunk_id, generation}`，所有变更接口都带 generation。
 - `BeginChunkWrite` 同时携带 `upload_id`、期望大小、校验和和过期时间。
-- Writer/Reader 为 RAII 对象，负责 fd 和临时资源释放。
+- Writer/Reader 是单一文件系统后端的具体 RAII 类，负责 fd 和临时资源释放；
+  当前不为尚不存在的多后端需求引入抽象接口或 Impl 层。
+- Writer/Reader 不得超过创建它们的 ChunkStore 生命周期；同一 ChunkWriteSession
+  同一时刻只允许一个有效 Writer。
+- `ByteRange::length` 是精确长度，`0` 表示合法空范围；读取整个 Chunk 使用不带
+  Range 的 `OpenRead` 重载。
+- `Verify` 成功但 `checksumMatches == false` 表示校验操作完成且发现数据损坏；
+  只有不存在、元数据损坏或 I/O 失败等情况才返回外层错误。
 - HTTP 层负责状态码、Header、认证和连接背压；ChunkStore 只返回领域错误。
 - ChunkStore 的同步接口可以先由磁盘线程池调用。未来改用异步 I/O 时，上层接口语义不变。
 
@@ -328,7 +346,7 @@ GET    /v1/chunks/{chunk_id}       下载，支持 Range
 DELETE /v1/chunks/{chunk_id}       内部管理接口，后续需要节点认证
 ```
 
-上传请求携带 `upload_id`、`generation`、总大小、checksum 和 `Content-Range`。偏移不匹配时返回当前 durable offset；完全重复且内容描述一致时返回幂等成功。下载响应携带 size、checksum、generation 和标准 Range Header。
+上传请求携带 `upload_id`、`generation`、总大小、checksum 和 `Content-Range`。偏移不匹配时同时返回当前 Writer 的 expected offset 和已持久化的 durable offset；完全重复且内容描述一致时返回幂等成功。下载响应携带 size、checksum、generation 和标准 Range Header。
 
 以后可以增加短期签名 token，使 Client 按 Coordinator 的计划直接访问节点；认证不是本阶段实现内容，但接口不要依赖浏览器 session 或原文件管理业务字段。
 

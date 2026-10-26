@@ -25,6 +25,7 @@ option(MYMUDUO_BUILD_LEGACY_FILE_MANAGER
 
 add_subdirectory(base)
 add_subdirectory(net)
+add_subdirectory(storage)
 
 if(MYMUDUO_BUILD_EXAMPLES)
     add_subdirectory(examples)
