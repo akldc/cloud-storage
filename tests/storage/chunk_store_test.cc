@@ -1,9 +1,12 @@
 #include "storage/chunk_store/ChunkStore.h"
 
 #include <cassert>
+#include <exception>
 #include <filesystem>
 #include <fcntl.h>
+#include <memory>
 #include <string>
+#include <sys/wait.h>
 #include <type_traits>
 #include <unistd.h>
 
@@ -183,6 +186,97 @@ void TestRecoveryPublishesInterruptedCommit()
     assert(recovery.ok() && recovery.value().completedCommits == 1);
     assert(restarted.Stat({kChunk, 1}).ok());
 }
+
+void TestDeleteConflictsWithActiveWriter()
+{
+    TempDir root;
+    ChunkStore store(root.path());
+    assert(store.Initialize().ok());
+    const std::string contents = "delete-vs-writer";
+    const auto request = MakeRequest(contents);
+    auto first = store.BeginWrite(request);
+    assert(first.ok());
+    auto writer = std::move(first).value();
+    assert(store.Delete({kChunk, 1}).code() == ErrorCode::kConflict);
+    assert(store.Stat({kChunk, 1}).status().code() == ErrorCode::kNotFound);
+    assert(writer->Abort().ok());
+    assert(store.Delete({kChunk, 1}).ok());
+
+    // An aborted but still live Writer is not an active write attempt.
+    auto second = store.BeginWrite(request);
+    assert(second.ok());
+    auto committedWriter = std::move(second).value();
+    assert(store.Delete({kChunk, 1}).code() == ErrorCode::kConflict);
+    assert(committedWriter->Append(0, contents.data(), contents.size()).ok());
+    assert(committedWriter->Commit().ok());
+    assert(store.Stat({kChunk, 1}).ok());
+    assert(store.Delete({kChunk, 1}).ok());
+    assert(store.Stat({kChunk, 1}).status().code() == ErrorCode::kNotFound);
+}
+
+void TestStoreWriterDestructionOrder()
+{
+    for (int state = 0; state < 3; ++state) {
+        TempDir root;
+        auto store = std::make_unique<ChunkStore>(root.path());
+        assert(store->Initialize().ok());
+        const std::string contents = "writer-lifetime";
+        auto created = store->BeginWrite(MakeRequest(contents));
+        assert(created.ok());
+        auto writer = std::move(created).value();
+        if (state == 1) {
+            assert(writer->Append(0, contents.data(), contents.size()).ok());
+            assert(writer->Commit().ok());
+        } else if (state == 2) {
+            assert(writer->Abort().ok());
+        }
+        writer.reset();
+        store.reset();
+    }
+}
+
+void TestStoreRejectsLiveWriterAtDestruction()
+{
+    for (int state = 0; state < 3; ++state) {
+        const pid_t child = ::fork();
+        assert(child >= 0);
+        if (child == 0) {
+            std::set_terminate([] { ::_exit(77); });
+            TempDir root;
+            auto store = std::make_unique<ChunkStore>(root.path());
+            assert(store->Initialize().ok());
+            const std::string contents = "writer-lifetime";
+            auto created = store->BeginWrite(MakeRequest(contents));
+            assert(created.ok());
+            auto writer = std::move(created).value();
+            if (state == 1) {
+                assert(writer->Append(0, contents.data(), contents.size()).ok());
+                assert(writer->Commit().ok());
+            } else if (state == 2) {
+                assert(writer->Abort().ok());
+            }
+            store.reset();
+            ::_exit(0);
+        }
+        int status = 0;
+        assert(::waitpid(child, &status, 0) == child);
+        assert(WIFEXITED(status) && WEXITSTATUS(status) == 77);
+    }
+}
+
+void TestFailedWriterCreationDoesNotCountAsLive()
+{
+    TempDir root;
+    auto store = std::make_unique<ChunkStore>(root.path());
+    assert(store->Initialize().ok());
+    auto invalid = MakeRequest("no-writer");
+    invalid.uploadId = "invalid";
+    assert(store->BeginWrite(invalid).status().code() == ErrorCode::kInvalidArgument);
+    // ResumeWrite registers the attempt before discovering missing metadata.
+    assert(store->ResumeWrite({kUpload, {kChunk, 1}}).status().code() ==
+           ErrorCode::kNotFound);
+    store.reset();
+}
 }  // namespace
 
 int main()
@@ -192,4 +286,8 @@ int main()
     TestRestartRecovery();
     TestVerifyDetectsCorruption();
     TestRecoveryPublishesInterruptedCommit();
+    TestDeleteConflictsWithActiveWriter();
+    TestStoreWriterDestructionOrder();
+    TestStoreRejectsLiveWriterAtDestruction();
+    TestFailedWriterCreationDoesNotCountAsLive();
 }

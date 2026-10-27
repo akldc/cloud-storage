@@ -217,25 +217,24 @@ class HttpRequest
   // URL解码函数（简化版）
   std::string urlDecode(const std::string& encoded) const {
     std::string result;
-    char ch;
-    size_t i;
-    size_t len = encoded.length();
+    auto hexDigit = [](char c) {
+      if (c >= '0' && c <= '9') return c - '0';
+      if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+      if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+      return -1;
+    };
 
-    for (i = 0; i < len; i++) {
-      if (encoded[i] != '%') {
-        if (encoded[i] == '+')
-          result += ' ';
-        else
-          result += encoded[i];
-      } else {
-        if (i + 2 < len) {
-          int value;
-          sscanf(encoded.substr(i + 1, 2).c_str(), "%x", &value);
-          ch = static_cast<char>(value);
-          result += ch;
-          i = i + 2;
+    for (size_t i = 0; i < encoded.size(); ++i) {
+      if (encoded[i] == '%' && i + 2 < encoded.size()) {
+        const int high = hexDigit(encoded[i + 1]);
+        const int low = hexDigit(encoded[i + 2]);
+        if (high >= 0 && low >= 0) {
+          result += static_cast<char>((high << 4) | low);
+          i += 2;
+          continue;
         }
       }
+      result += encoded[i] == '+' ? ' ' : encoded[i];
     }
     return result;
   }

@@ -4,6 +4,7 @@
 #include "storage/chunk_store/ChunkReader.h"
 #include "storage/chunk_store/ChunkWriter.h"
 
+#include <atomic>
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -55,6 +56,8 @@ public:
     ChunkStore(const ChunkStore&) = delete;
     ChunkStore& operator=(const ChunkStore&) = delete;
 
+    // Stop all calls and destroy every ChunkWriter before destroying the Store.
+    // Destruction must not race with any Store or Writer operation.
     // Initializes directories and performs startup recovery. Repeated calls are
     // safe and return the original recovery report. Call before any other API.
     Result<RecoveryReport> Initialize();
@@ -87,6 +90,7 @@ private:
     std::mutex activeWritersMutex_;
     std::set<std::string> activeChunks_;
     std::set<std::string> activeAttempts_;
+    std::atomic<size_t> liveWriters_{0};
 };
 
 }  // namespace object_storage

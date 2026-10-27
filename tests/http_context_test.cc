@@ -18,6 +18,8 @@ int main()
     assert(context.request().path() == "/objects");
     assert(context.request().getHeader("Host") == "localhost");
     assert(context.request().body() == "hello");
+    assert(context.request().urlDecode("a%2Fb+%41") == "a/b A");
+    assert(context.request().urlDecode("%GG%2") == "%GG%2");
 
     context.reset();
     input.append("POST / HTTP/1.1\r\nContent-Length: -1\r\n\r\n");

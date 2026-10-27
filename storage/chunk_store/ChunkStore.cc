@@ -7,6 +7,7 @@
 #include <cerrno>
 #include <chrono>
 #include <cstring>
+#include <exception>
 #include <fcntl.h>
 #include <filesystem>
 #include <fstream>
@@ -341,7 +342,10 @@ ChunkStore::ChunkStore(std::string root) : ChunkStore(std::move(root), Options{}
 ChunkStore::ChunkStore(std::string root, Options options)
     : root_(std::move(root)), options_(options) {}
 
-ChunkStore::~ChunkStore() = default;
+ChunkStore::~ChunkStore()
+{
+    if (liveWriters_.load() != 0) std::terminate();
+}
 
 std::mutex& ChunkStore::MutexFor(const std::string& chunkId) const
 {
@@ -453,9 +457,15 @@ Result<std::unique_ptr<ChunkWriter>> ChunkStore::BeginWrite(const BeginChunkWrit
         ReleaseWriter(request.descriptor.chunkId, request.uploadId);
         return status;
     }
-    return std::unique_ptr<ChunkWriter>(
-        new ChunkWriter(this, directory, request.uploadId, request.descriptor,
-                        request.expiresAtMicros, fd, 0, 0));
+    try {
+        return std::unique_ptr<ChunkWriter>(
+            new ChunkWriter(this, directory, request.uploadId, request.descriptor,
+                            request.expiresAtMicros, fd, 0, 0));
+    } catch (...) {
+        ::close(fd);
+        ReleaseWriter(request.descriptor.chunkId, request.uploadId);
+        throw;
+    }
 }
 
 Result<std::unique_ptr<ChunkWriter>> ChunkStore::ResumeWrite(const ResumeChunkWrite& request)
@@ -525,9 +535,15 @@ Result<std::unique_ptr<ChunkWriter>> ChunkStore::ResumeWrite(const ResumeChunkWr
             return status;
         }
     }
-    return std::unique_ptr<ChunkWriter>(new ChunkWriter(
-        this, directory, upload.value().uploadId, upload.value().descriptor,
-        upload.value().expiresAtMicros, fd, durable, durable));
+    try {
+        return std::unique_ptr<ChunkWriter>(new ChunkWriter(
+            this, directory, upload.value().uploadId, upload.value().descriptor,
+            upload.value().expiresAtMicros, fd, durable, durable));
+    } catch (...) {
+        ::close(fd);
+        ReleaseWriter(request.key.chunkId, request.uploadId);
+        throw;
+    }
 }
 
 Result<ChunkStat> ChunkStore::Stat(const ChunkKey& key) const
@@ -587,6 +603,12 @@ Status ChunkStore::Delete(const ChunkKey& key)
         return {ErrorCode::kInvalidArgument, "chunk key is invalid"};
     }
     std::lock_guard<std::mutex> lock(MutexFor(key.chunkId));
+    {
+        std::lock_guard<std::mutex> activeLock(activeWritersMutex_);
+        if (activeChunks_.count(key.chunkId) != 0) {
+            return {ErrorCode::kConflict, "a writer for this chunk is active"};
+        }
+    }
     auto descriptor = LoadCommitted(root_, options_.maxMetadataSize, key.chunkId);
     if (!descriptor.ok()) {
         return descriptor.status().code() == ErrorCode::kNotFound ? Status::Ok() : descriptor.status();

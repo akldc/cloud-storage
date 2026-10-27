@@ -29,12 +29,14 @@ ChunkWriter::ChunkWriter(ChunkStore* store,
       receivedBytes_(receivedBytes),
       durableBytes_(durableBytes)
 {
+    ++store_->liveWriters_;
 }
 
 ChunkWriter::~ChunkWriter()
 {
     if (fd_ >= 0) ::close(fd_);
     ReleaseRegistration();
+    --store_->liveWriters_;
 }
 
 AppendResult ChunkWriter::Append(uint64_t offset, const void* data, size_t length)
