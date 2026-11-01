@@ -1,5 +1,6 @@
 add_library(chunk_store
     ChunkStore.cc
+    ChunkStoreInternal.cc
     ChunkWriter.cc
     ChunkReader.cc
 )

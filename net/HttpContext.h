@@ -42,7 +42,8 @@ class HttpContext
   // default copy-ctor, dtor and assignment are fine
 
   // 返回false表示解析出错，true表示解析成功（包括需要更多数据和解析完成的情况）
-  HttpContext::ParseResult parseRequest(Buffer* buf, Timestamp receiveTime);
+  HttpContext::ParseResult parseRequest(Buffer* buf, Timestamp receiveTime,
+                                        bool stopAtHeaders = false);
   bool gotAll() const
   { return state_ == kGotAll; }
 
@@ -55,6 +56,9 @@ class HttpContext
 
   size_t remainingLength() const
   { return contentLength_ - bodyReceived_; }
+
+  size_t contentLength() const { return contentLength_; }
+  bool consumeBody(size_t length);
 
   bool isChunked() const
   { return isChunked_; }

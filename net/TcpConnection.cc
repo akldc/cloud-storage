@@ -111,7 +111,7 @@ void TcpConnection::sendInLoop(const void* data, size_t len) {
 
     // 如果输出缓冲区为空，尝试直接发送数据
     if (!channel_->isWriting() && outputBuffer_.readableBytes() == 0) {
-        nwrote = ::write(channel_->fd(), data, len);
+        nwrote = ::send(channel_->fd(), data, len, MSG_NOSIGNAL);
         if (nwrote >= 0) {
             remaining = len - static_cast<size_t>(nwrote);
             LOG_DEBUG << "sendInLoop: wrote " << nwrote << " bytes, remaining " << remaining << " bytes";
@@ -180,6 +180,26 @@ void TcpConnection::forceCloseInLoop() {
     }
 }
 
+void TcpConnection::startRead() {
+    TcpConnectionPtr self = shared_from_this();
+    loop_->runInLoop([self] { self->startReadInLoop(); });
+}
+
+void TcpConnection::stopRead() {
+    TcpConnectionPtr self = shared_from_this();
+    loop_->runInLoop([self] { self->stopReadInLoop(); });
+}
+
+void TcpConnection::startReadInLoop() {
+    loop_->assertInLoopThread();
+    if (state_ == kConnected && !channel_->isReading()) channel_->enableReading();
+}
+
+void TcpConnection::stopReadInLoop() {
+    loop_->assertInLoopThread();
+    if (state_ == kConnected && channel_->isReading()) channel_->disableReading();
+}
+
 void TcpConnection::connectEstablished() {
     loop_->assertInLoopThread();
     assert(state_ == kConnecting);
@@ -229,7 +249,8 @@ void TcpConnection::handleWrite() {
     loop_->assertInLoopThread();
     if (channel_->isWriting()) {
         LOG_DEBUG << "handleWrite: try to write " << outputBuffer_.readableBytes() << " bytes";
-        ssize_t n = ::write(channel_->fd(), outputBuffer_.peek(), outputBuffer_.readableBytes());
+        ssize_t n = ::send(channel_->fd(), outputBuffer_.peek(),
+                           outputBuffer_.readableBytes(), MSG_NOSIGNAL);
         if (n > 0) {
             LOG_DEBUG << "handleWrite: wrote " << n << " bytes";
             outputBuffer_.retrieve(static_cast<size_t>(n));

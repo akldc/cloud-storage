@@ -34,6 +34,7 @@ public:
     Status Abort();
     uint64_t receivedBytes() const;
     uint64_t durableBytes() const;
+    const ChunkDescriptor& descriptor() const { return descriptor_; }
 
 private:
     friend class ChunkStore;
@@ -52,9 +53,9 @@ private:
     std::string uploadId_;
     ChunkDescriptor descriptor_;
     int64_t expiresAtMicros_;
-    int fd_;
-    uint64_t receivedBytes_;
-    uint64_t durableBytes_;
+    int fd_;  // 已经打开的文件描述符，指向 staging/<chunkId>.<uploadId>.<generation>.tmp/data.part
+    uint64_t receivedBytes_;  // 已成功写入的字节数
+    uint64_t durableBytes_;   // 已经达到持久化保证的连续数据前缀长度  
     mutable std::mutex mutex_;
     bool registered_{true};
     bool finished_{false};

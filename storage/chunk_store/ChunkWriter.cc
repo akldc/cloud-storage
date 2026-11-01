@@ -47,8 +47,7 @@ AppendResult ChunkWriter::Append(uint64_t offset, const void* data, size_t lengt
                 receivedBytes_, durableBytes_};
     }
 
-    // expectedOffset 表示当前 Writer 可以继续追加的位置；durableOffset 表示
-    // 进程中断后客户端能够安全恢复的位置。两者在 Checkpoint 前可能不同。
+    // 检查写入偏移量是否与当前已接收字节数一致，必须一致，禁止任意位置随意写入
     if (offset != receivedBytes_) {
         return {{ErrorCode::kOffsetMismatch,
                  "expected offset " + std::to_string(receivedBytes_)},
@@ -71,17 +70,19 @@ AppendResult ChunkWriter::Append(uint64_t offset, const void* data, size_t lengt
         }
         written += static_cast<size_t>(n);
     }
+    // 全部写入成功，更新已接收字节数
     receivedBytes_ += written;
     return {Status::Ok(), receivedBytes_, durableBytes_};
 }
+
 
 Status ChunkWriter::Checkpoint()
 {
     std::lock_guard<std::mutex> lock(mutex_);
     if (finished_) return {ErrorCode::kConflict, "writer is closed"};
 
-    // 先保证 data.part 落盘，再原子替换 upload.meta。这样恢复代码看到的
-    // durable_bytes 永远不会领先于真正持久化的数据。
+    // 先保证 data.part 落盘，再原子替换 upload.meta，然后更新durableBytes_
+    // 这样恢复代码看到的 durable_bytes 永远不会领先于真正持久化的数据。
     if (DataSync(fd_) != 0) return IoError("sync chunk");
     UploadMetadata checkpoint{uploadId_, descriptor_, durableBytes_, expiresAtMicros_};
     checkpoint.durableBytes = receivedBytes_;
@@ -90,12 +91,13 @@ Status ChunkWriter::Checkpoint()
     return status;
 }
 
+// 将已经完整写入的 data.part 校验为可信数据，再把整个上传目录从 staging 发布到 chunks，使其成为正式可读取的 Chunk。
 Result<ChunkDescriptor> ChunkWriter::Commit()
 {
     std::lock_guard<std::mutex> writerLock(mutex_);
     if (committed_) return descriptor_;
     if (finished_) return Status(ErrorCode::kConflict, "writer is closed");
-    if (receivedBytes_ != descriptor_.size) {
+    if (receivedBytes_ != descriptor_.size) {  // 要求数据已经完整写入
         return Status(ErrorCode::kConflict, "chunk is incomplete");
     }
 
@@ -106,8 +108,7 @@ Result<ChunkDescriptor> ChunkWriter::Commit()
         return Status(ErrorCode::kChecksumMismatch, "chunk checksum does not match");
     }
 
-    // Chunk 锁只覆盖状态转换，不跟随 Writer 的整个生命周期。数据同步和哈希
-    // 不需要锁住最终目录，完成校验后才串行化提交、删除等 rename 操作。
+    // 获取chunk粒度的互斥锁
     std::lock_guard<std::mutex> chunkLock(store_->MutexFor(descriptor_.chunkId));
 
     // 发布顺序：同步数据 -> staging 内生成最终 data/meta -> 清除续传元数据
@@ -133,7 +134,7 @@ Result<ChunkDescriptor> ChunkWriter::Commit()
         auto existing = LoadCommitted(store_->root_, store_->options_.maxMetadataSize,
                                       descriptor_.chunkId);
         if (existing.ok() && existing.value() == descriptor_ &&
-            VerifyDataFile(final / "data", existing.value()).ok()) {
+            VerifyDataFile(final / "data", existing.value()).ok()) {  // 已存在完全相同的 chunk，移动staging目录到trash
             status = MoveDirectory(directory_, UniqueMovePath(
                 store_->root_, "trash", directory_.filename().string()));
             if (!status.ok()) return status;
@@ -141,7 +142,7 @@ Result<ChunkDescriptor> ChunkWriter::Commit()
             ReleaseRegistration();
             return descriptor_;
         }
-        status = MoveDirectory(directory_, UniqueMovePath(
+        status = MoveDirectory(directory_, UniqueMovePath(  // staging目录与已存在的不同，移动到quarantine
             store_->root_, "quarantine", directory_.filename().string()));
         if (!status.ok()) return status;
         finished_ = true;
@@ -149,14 +150,15 @@ Result<ChunkDescriptor> ChunkWriter::Commit()
         return Status(ErrorCode::kConflict,
                       "a different committed chunk already exists");
     }
-    if (::rename(directory_.c_str(), final.c_str()) != 0) return IoError("publish chunk");
-    status = FsyncDirectory(final.parent_path());
+    // 正式发布
+    status = MoveDirectory(directory_, final);
     if (!status.ok()) return status;
     finished_ = committed_ = true;
     ReleaseRegistration();
     return descriptor_;
 }
 
+// 中止当前上传任务，移动到 trash 目录
 Status ChunkWriter::Abort()
 {
     std::lock_guard<std::mutex> writerLock(mutex_);

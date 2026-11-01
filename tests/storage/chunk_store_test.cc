@@ -1,10 +1,13 @@
 #include "storage/chunk_store/ChunkStore.h"
 
 #include <cassert>
+#include <cerrno>
+#include <cstdio>
 #include <exception>
 #include <filesystem>
 #include <fcntl.h>
 #include <memory>
+#include <limits.h>
 #include <string>
 #include <sys/wait.h>
 #include <type_traits>
@@ -12,6 +15,30 @@
 
 using namespace object_storage;
 namespace fs = std::filesystem;
+
+namespace {
+std::string syncTarget;
+int syncCount = 0;
+bool failNextSync = false;
+}  // namespace
+
+extern "C" int __real_fsync(int fd);
+extern "C" int __wrap_fsync(int fd)
+{
+    char link[64];
+    std::snprintf(link, sizeof link, "/proc/self/fd/%d", fd);
+    char path[PATH_MAX];
+    const ssize_t size = ::readlink(link, path, sizeof path);
+    if (size > 0 && std::string(path, static_cast<size_t>(size)) == syncTarget) {
+        ++syncCount;
+        if (failNextSync) {
+            failNextSync = false;
+            errno = EIO;
+            return -1;
+        }
+    }
+    return __real_fsync(fd);
+}
 
 namespace {
 static_assert(!std::is_polymorphic_v<ChunkWriter>);
@@ -129,6 +156,8 @@ void TestRestartRecovery()
         auto recovery = store.Initialize();
         assert(recovery.ok() && recovery.value().resumableWrites == 1);
         assert(store.Stat({kChunk, 1}).status().code() == ErrorCode::kNotFound);
+        assert(store.BeginWrite(MakeRequest(contents)).status().code() ==
+               ErrorCode::kWriteAttemptExists);
         auto result = store.ResumeWrite({kUpload, {kChunk, 1}});
         assert(result.ok());
         auto writer = std::move(result).value();
@@ -182,9 +211,130 @@ void TestRecoveryPublishesInterruptedCommit()
     fs::rename(final, interrupted);  // State after staging is complete, before publish.
 
     ChunkStore restarted(root.path());
+    syncTarget = (fs::path(root.path()) / "staging").string();
+    syncCount = 0;
     auto recovery = restarted.Initialize();
+    syncTarget.clear();
     assert(recovery.ok() && recovery.value().completedCommits == 1);
+    assert(syncCount > 0);
     assert(restarted.Stat({kChunk, 1}).ok());
+}
+
+void TestExclusiveStorageRoot()
+{
+    TempDir root;
+    auto first = std::make_unique<ChunkStore>(root.path());
+    assert(first->Initialize().ok());
+    ChunkStore second(root.path());
+    assert(second.Initialize().status().code() == ErrorCode::kConflict);
+
+    const pid_t child = ::fork();
+    assert(child >= 0);
+    if (child == 0) {
+        ChunkStore competitor(root.path());
+        ::_exit(competitor.Initialize().status().code() == ErrorCode::kConflict ? 0 : 1);
+    }
+    int status = 0;
+    assert(::waitpid(child, &status, 0) == child);
+    assert(WIFEXITED(status) && WEXITSTATUS(status) == 0);
+
+    first.reset();
+    assert(second.Initialize().ok());
+}
+
+void TestStagingDirectorySync()
+{
+    TempDir root;
+    ChunkStore store(root.path());
+    assert(store.Initialize().ok());
+    syncTarget = (fs::path(root.path()) / "staging").string();
+    syncCount = 0;
+    auto created = store.BeginWrite(MakeRequest("staging-sync"));
+    assert(created.ok() && syncCount > 0);
+    auto writer = std::move(created).value();
+    assert(writer->Abort().ok());
+    writer.reset();
+
+    auto failed = MakeRequest("staging-sync");
+    failed.descriptor.chunkId = "22222222-3333-4444-5555-666666666666";
+    failNextSync = true;
+    auto result = store.BeginWrite(failed);
+    assert(result.status().code() == ErrorCode::kIoError);
+    assert(!failNextSync);
+    syncCount = 0;
+    auto resumed = store.ResumeWrite({failed.uploadId,
+                                      {failed.descriptor.chunkId, failed.descriptor.generation}});
+    syncTarget.clear();
+    assert(resumed.ok() && syncCount > 0);
+    assert(resumed.value()->Abort().ok());
+}
+
+void TestRootDirectorySyncRetry()
+{
+    TempDir parent;
+    const fs::path root = fs::path(parent.path()) / "new-root";
+    ChunkStore store(root.string());
+    syncTarget = parent.path();
+    failNextSync = true;
+    assert(store.Initialize().status().code() == ErrorCode::kIoError);
+    assert(!failNextSync);
+    syncCount = 0;
+    assert(store.Initialize().ok());
+    syncTarget.clear();
+    assert(syncCount > 0);
+}
+
+void TestCommitSourceDirectorySyncFailure()
+{
+    TempDir root;
+    const std::string contents = "commit-source-sync";
+    {
+        ChunkStore store(root.path());
+        assert(store.Initialize().ok());
+        auto created = store.BeginWrite(MakeRequest(contents));
+        assert(created.ok());
+        auto writer = std::move(created).value();
+        assert(writer->Append(0, contents.data(), contents.size()).ok());
+        syncTarget = (fs::path(root.path()) / "staging").string();
+        syncCount = 0;
+        failNextSync = true;
+        auto committed = writer->Commit();
+        syncTarget.clear();
+        assert(committed.status().code() == ErrorCode::kIoError);
+        assert(syncCount > 0 && !failNextSync);
+        writer.reset();
+    }
+    ChunkStore restarted(root.path());
+    syncTarget = (fs::path(root.path()) / "chunks" / "01" / "23").string();
+    syncCount = 0;
+    assert(restarted.Initialize().ok());
+    syncTarget.clear();
+    assert(syncCount > 0);
+    assert(restarted.Stat({kChunk, 1}).ok());
+}
+
+void TestUncertainPublishedChunkNeedsSync()
+{
+    TempDir root;
+    ChunkStore store(root.path());
+    assert(store.Initialize().ok());
+    const std::string contents = "commit-target-sync";
+    auto created = store.BeginWrite(MakeRequest(contents));
+    assert(created.ok());
+    auto writer = std::move(created).value();
+    assert(writer->Append(0, contents.data(), contents.size()).ok());
+
+    syncTarget = (fs::path(root.path()) / "chunks" / "01" / "23").string();
+    failNextSync = true;
+    assert(writer->Commit().status().code() == ErrorCode::kIoError);
+    assert(!failNextSync);
+    writer.reset();
+
+    failNextSync = true;
+    assert(store.Stat({kChunk, 1}).status().code() == ErrorCode::kIoError);
+    assert(!failNextSync);
+    assert(store.Stat({kChunk, 1}).ok());
+    syncTarget.clear();
 }
 
 void TestDeleteConflictsWithActiveWriter()
@@ -286,6 +436,11 @@ int main()
     TestRestartRecovery();
     TestVerifyDetectsCorruption();
     TestRecoveryPublishesInterruptedCommit();
+    TestExclusiveStorageRoot();
+    TestStagingDirectorySync();
+    TestRootDirectorySyncRetry();
+    TestCommitSourceDirectorySyncFailure();
+    TestUncertainPublishedChunkNeedsSync();
     TestDeleteConflictsWithActiveWriter();
     TestStoreWriterDestructionOrder();
     TestStoreRejectsLiveWriterAtDestruction();

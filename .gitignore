@@ -8,6 +8,10 @@ cmake-build-*/
 *.dylib
 *.exe
 
+# agent
+.agents/
+.specify/
+
 # IDE
 .vscode/
 .idea/

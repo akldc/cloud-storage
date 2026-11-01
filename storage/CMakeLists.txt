@@ -1,2 +1,5 @@
 add_subdirectory(common)
 add_subdirectory(chunk_store)
+if(MYMUDUO_BUILD_HTTP)
+    add_subdirectory(node)
+endif()

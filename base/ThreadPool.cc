@@ -104,6 +104,18 @@ void ThreadPool::run(Task task)
     }
 }
 
+bool ThreadPool::tryRun(Task task)
+{
+    if (!task) return false;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (!running_ || threads_.empty() || isFull()) return false;
+        queue_.push_back(std::move(task));
+    }
+    notEmpty_.notify_one();
+    return true;
+}
+
 ThreadPool::Task ThreadPool::take()
 {
     std::unique_lock<std::mutex> lock(mutex_);

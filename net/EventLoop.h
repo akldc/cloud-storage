@@ -45,6 +45,10 @@ public:
     /// @brief 把回调放入队列，唤醒loop所在线程执行回调
     void queueInLoop(Functor cb);
 
+    // Drain queued completions from the owning thread after the loop stops.
+    // The caller must ensure producers have stopped before destroying state.
+    void drainPendingFunctors();
+
     /// @brief 唤醒loop所在线程
     void wakeup();
 

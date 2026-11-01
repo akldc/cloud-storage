@@ -133,7 +133,15 @@ bool HttpContext::processBody(Buffer* buf) {
 }
 
 // return false for error, true for success (got all or need more data)
-HttpContext::ParseResult HttpContext::parseRequest(Buffer* buf, Timestamp receiveTime) {
+bool HttpContext::consumeBody(size_t length) {
+    if (state_ != kExpectBody || length > remainingLength()) return false;
+    bodyReceived_ += length;
+    if (bodyReceived_ == contentLength_) state_ = kGotAll;
+    return true;
+}
+
+HttpContext::ParseResult HttpContext::parseRequest(Buffer* buf, Timestamp receiveTime,
+                                                  bool stopAtHeaders) {
     bool ok = true;
     bool hasMore = true;
     ParseResult result = kNeedMore;
@@ -171,7 +179,7 @@ HttpContext::ParseResult HttpContext::parseRequest(Buffer* buf, Timestamp receiv
                     } else {
                         // 有请求体，继续处理
                         result = kHeadersComplete;
-                        if (buf->readableBytes() > 0) {
+                        if (!stopAtHeaders && buf->readableBytes() > 0) {
                             // 如果缓冲区还有数据，继续处理body
                             continue;
                         }
@@ -183,6 +191,11 @@ HttpContext::ParseResult HttpContext::parseRequest(Buffer* buf, Timestamp receiv
                 hasMore = false;
             }
         } else if (state_ == kExpectBody) {
+            if (stopAtHeaders) {
+                result = kHeadersComplete;
+                hasMore = false;
+                continue;
+            }
             if (isChunked_) {
                 result = kError;  // chunked decoding is not implemented
                 hasMore = false;

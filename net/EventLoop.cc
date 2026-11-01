@@ -121,6 +121,17 @@ void EventLoop::queueInLoop(Functor cb) {
     }
 }
 
+void EventLoop::drainPendingFunctors() {
+    assertInLoopThread();
+    for (;;) {
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            if (pendingFunctors_.empty()) break;
+        }
+        doPendingFunctors();
+    }
+}
+
 
 // 通过向wakeupFd_写入数据来唤醒EventLoop所在的线程，从而让它处理新的回调函数
 void EventLoop::wakeup() {

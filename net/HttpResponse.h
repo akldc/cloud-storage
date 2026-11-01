@@ -18,14 +18,21 @@ public:
     enum HttpStatusCode {
         kUnknown = 0,
         k200Ok = 200,
+        k201Created = 201,
+        k202Accepted = 202,
+        k204NoContent = 204,
         k206PartialContent = 206,
         k301MovedPermanently = 301,
+        k308ResumeIncomplete = 308,
         k400BadRequest = 400,
         k401Unauthorized = 401,
         k403Forbidden = 403,
         k404NotFound = 404,
+        k409Conflict = 409,
         k416RangeNotSatisfiable = 416, //客户端请求的资源范围无效或无法满足
+        k422UnprocessableEntity = 422,
         k500InternalServerError = 500,
+        k503ServiceUnavailable = 503,
     };
 
     explicit HttpResponse(bool close)

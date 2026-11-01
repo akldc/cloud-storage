@@ -59,6 +59,10 @@ public:
      */
     void run(Task task);
 
+    // Submit without waiting for queue space. Returns false if stopped or full.
+    // Requires at least one worker so the caller never executes disk work inline.
+    bool tryRun(Task task);
+
     /**
      * @brief 获取任务队列大小
      */

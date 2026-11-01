@@ -38,4 +38,14 @@ int main()
     response.appendToBuffer(&output);
     const std::string wire = output.retrieveAllAsString();
     assert(wire.find("Content-Length: 4\r\n") != std::string::npos);
+
+    HttpContext streaming;
+    Buffer upload;
+    upload.append("PUT /v1/chunks/x HTTP/1.1\r\nContent-Length: 5\r\n\r\nhello");
+    assert(streaming.parseRequest(&upload, Timestamp::now(), true) ==
+           HttpContext::kHeadersComplete);
+    assert(streaming.request().body().empty());
+    assert(upload.readableBytes() == 5 && streaming.remainingLength() == 5);
+    upload.retrieve(5);
+    assert(streaming.consumeBody(5) && streaming.gotAll());
 }

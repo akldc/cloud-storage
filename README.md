@@ -52,4 +52,6 @@ cmake --build build-core -j
 
 分布式对象存储的第一阶段设计见 [docs/object_storage_phase1_design.md](docs/object_storage_phase1_design.md)。
 
+单节点 Storage Node 的启动方式、HTTP 请求头及背压语义见 [docs/storage_node_http.md](docs/storage_node_http.md)。
+
 现有 Reactor/TCP/HTTP 源码的分层导览和推荐阅读顺序见 [NETWORK_FRAMEWORK_GUIDE.md](NETWORK_FRAMEWORK_GUIDE.md)。

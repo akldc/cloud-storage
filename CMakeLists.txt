@@ -27,6 +27,10 @@ add_subdirectory(base)
 add_subdirectory(net)
 add_subdirectory(storage)
 
+if(MYMUDUO_BUILD_HTTP)
+    add_subdirectory(apps)
+endif()
+
 if(MYMUDUO_BUILD_EXAMPLES)
     add_subdirectory(examples)
 endif()

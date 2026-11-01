@@ -2,6 +2,7 @@
 
 #include <atomic>
 #include <cassert>
+#include <future>
 #include <thread>
 
 int main()
@@ -24,4 +25,17 @@ int main()
     inlinePool.run([&executed] { executed = std::this_thread::get_id(); });
     inlinePool.stop();
     assert(executed == caller);
+
+    mymuduo::ThreadPool bounded("bounded-");
+    bounded.setMaxQueueSize(1);
+    bounded.start(1);
+    std::promise<void> started;
+    std::promise<void> release;
+    std::shared_future<void> gate = release.get_future().share();
+    assert(bounded.tryRun([&] { started.set_value(); gate.wait(); }));
+    started.get_future().wait();
+    assert(bounded.tryRun([] {}));
+    assert(!bounded.tryRun([] {}));
+    release.set_value();
+    bounded.stop();
 }

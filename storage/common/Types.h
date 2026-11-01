@@ -17,6 +17,9 @@ struct Checksum {
     std::string value;  // Lowercase hexadecimal.
 };
 
+// ChunkKey：定位一个特定版本的 Chunk
+// ChunkDescriptor：描述这个 Chunk 的完整属性
+
 struct ChunkKey {
     std::string chunkId;
     uint64_t generation{1};
@@ -24,13 +27,13 @@ struct ChunkKey {
 
 struct ChunkDescriptor {
     std::string chunkId;
-    std::string objectId;
+    std::string objectId;   // 所属对象id
     uint64_t objectVersion{0};
-    uint32_t index{0};
-    uint64_t logicalOffset{0};
+    uint32_t index{0};      // 分块序号
+    uint64_t logicalOffset{0}; // 在原始对象中的偏移
     uint64_t size{0};
     Checksum checksum;
-    uint64_t generation{1};
+    uint64_t generation{1}; // chunk的版本号，上传失败后重新上传会增加该值, 识别过期操作，防止旧请求干扰新状态
     uint32_t formatVersion{1};
 };
 

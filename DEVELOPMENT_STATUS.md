@@ -2,7 +2,7 @@
 
 ## 项目目标与当前阶段
 
-本仓库是一个 C++ 对象存储项目，重点是存储引擎和基础架构能力，包括 Chunk 持久化、崩溃恢复、有界流式 I/O，以及后续的分布式扩展。目前已实现单节点本地 `ChunkStore`。面向 Linux 的 Reactor/TCP 库和可选 HTTP 库可作为未来 Storage Node 的基础；HTTP 流式上传和下载尚未实现。
+本仓库是一个 C++ 对象存储项目，重点是存储引擎和基础架构能力，包括 Chunk 持久化、崩溃恢复、有界流式 I/O，以及后续的分布式扩展。目前已实现单节点本地 `ChunkStore`，并新增可独立运行的 Storage Node HTTP 数据面，支持单段流式 PUT、HEAD 续传查询、GET/Range 和 DELETE。尚未实现 Coordinator 或多副本功能。
 
 ## 职责、所有权与生命周期
 
@@ -18,7 +18,7 @@
 
 `Delete` 获取 Chunk 状态转换锁，并在持锁期间检查活动 Writer 登记。如果该 Chunk 有活动 Writer，返回 `kConflict`，不自动取消上传，也不执行删除。没有活动 Writer 时，沿用原有的 generation 校验和移动目录删除逻辑。`BeginWrite`、`ResumeWrite`、`Commit`、`Abort` 使用同一 Chunk 锁处理状态转换；涉及活动登记时，锁顺序为先获取 Chunk 锁，再获取登记互斥锁。Writer 的方法调用另由 Writer 自身的互斥锁串行化。
 
-## 本阶段修改与验证
+## ChunkStore 生命周期阶段的修改与验证
 
 本阶段修改了 `storage/chunk_store/ChunkStore.h`、`ChunkStore.cc`、`ChunkWriter.cc` 和 `tests/storage/chunk_store_test.cc`。新增测试覆盖正常的 Writer/Store 析构顺序、在独立子进程中验证未完成及已 Commit/Abort 但仍存活的 Writer 触发 fail-fast、Writer 创建失败路径，以及 Delete 冲突后 Abort 或 Commit 与正常删除的结果。此前工作区中与本阶段无关的 HTTP 修改得到保留。
 
@@ -53,10 +53,28 @@ git diff --check
 - 现有测试未证明所有并发 I/O、崩溃点和文件系统错误交错下的正确性。Store 的关闭顺序仍需调用方保证。
 - 无 Range 的 `OpenRead` 先单独调用 `Stat`，再打开文件描述符；并发 Delete 可能使后一步返回 `NotFound`。
 
-完成必要的回归验证后，下一阶段计划开发 Storage Node 的 HTTP 流式上传、下载、有界缓冲和背压。这些能力目前尚未实现。
+## Storage Node HTTP 阶段
+
+单节点 Storage Node HTTP 数据面已实现并通过测试。 可用 ./build/bin/storage_node ROOT PORT 启动；请求协议见 storage_node_http.md (docs/storage_node_http.md)。
+
+新增服务支持分段 PUT、HEAD 查询持久化偏移、GET 与单段 Range、DELETE，以及已提交 Chunk 的重复上传。PUT 按 64 KiB 窗口交给磁盘线程 Append 和 Checkpoint；断线保留已持久化前缀。Commit 结果不确定时返回 503 和 X-Commit-State: unknown，要求调用方查询状态或经重启恢复确认。
+
+接口调整集中在 HttpContext (net/HttpContext.h)、TcpConnection (net/TcpConnection.h)、ThreadPool (base/ThreadPool.h) 和 EventLoop (net/EventLoop.h)：分别增加头部完成后暂停解析、暂停/恢复读取、向有界队列非阻塞提交，以及退出时排空完成回调。服务实现在 StorageNode.cc (storage/node/StorageNode.cc)，原有普通 HTTP 解析入口保持可用。
+
+内存与关闭： PUT body 不进入 HttpRequest::body()；每连接最多一个在途磁盘任务。上传处理期间暂停读取，下载在前一窗口写完后才读下一块，因此不会把整个 Chunk 放入用户态内存，慢磁盘或慢客户端也不会使单连接缓冲无限增长。默认上限为 256 个连接、64 个待处理磁盘任务，并设有空闲超时。断线不自动 Abort；退出时排空磁盘任务及回调，在清理线程释放 Writer/Reader 后才析构 Store。
+
+验证： cmake --build build -j4、ctest --test-dir build --output-on-failure 和对应的 build-sanitize ASan/UBSan 构建与测试均通过：8/8 通过、0 跳过，无编译警告。新增 集成测试 (tests/integration/storage_node_test.py)覆盖 8 MiB 上传下载、Range、续传与重启、重复请求、并发连接、慢读客户端、人工磁盘延迟、活动写入时的删除冲突及上传中的服务关闭；进程高水位内存检查也通过。HTTP 关闭的核心构建与 git diff --check 均通过。
+
+已知限制：当前每连接只处理一个已知长度请求；尚无认证、TLS、chunked 传输、同一 root 的进程间排他锁或 trash 清理。GET 返回存储的 SHA-256 供客户端校验，不在每次读取时重新计算全量校验和。内存测试验证了上述场景，尚不构成所有负载下的形式化上界证明。
+
+本阶段新增 `storage/node/StorageNode.*`、`apps/storage_node.cc` 与真实 socket 集成测试，并扩展 HTTP 头部暂停解析、TCP 暂停/恢复读取、线程池非阻塞提交和 EventLoop 退出后回调排空。PUT/GET 使用固定 64 KiB 数据窗口、单连接一个在途磁盘任务、有界队列与连接上限。断线保留检查点；服务退出时先排空任务与资源，再析构 Store。协议和限制见 `docs/storage_node_http.md`。
+
+在 Ubuntu 22.04.5 上，启用 `-Wall -Wextra -Wpedantic` 的完整构建无警告；新增集成测试与原有测试组成的 CTest **8/8 通过、0 跳过**，ASan/UBSan 构建与完整 CTest 也 **8/8 通过、0 跳过**。`MYMUDUO_BUILD_HTTP=OFF` 的核心配置及构建通过。集成测试覆盖 8 MiB 上传下载、Range、续传与重启、重复上传、并发连接、慢读客户端、人工磁盘延迟、活动写入时删除冲突、服务在上传期间关闭、空闲连接超时，以及进程高水位内存检查。具体命令沿用上面的构建命令，完整测试使用 `ctest --test-dir build --output-on-failure` 和 `ctest --test-dir build-sanitize --output-on-failure`。
+
+当前仍需处理身份认证、root 进程间排他、trash 清理、Commit/Abort 中间失败的底层状态，以及更广泛的故障注入和长期负载验证。HTTP 层对不确定提交结果返回明确的未知状态，不把它当作已失败或已成功。
 
 
-## 补充
+## ChunkStore阶段的补充提醒
 通过当前单元测试，不代表 ChunkStore 已经具备生产级崩溃一致性。
 
 尤其是 Codex 提到的 Commit/Abort 中间失败后状态不明确，需要在 HTTP 层特别小心，不能简单地收到任何异常就自动重新执行 Commit。

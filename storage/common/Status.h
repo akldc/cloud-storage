@@ -19,6 +19,7 @@ enum class ErrorCode {
     kCorrupt,
     kIoError,
     kInvalidArgument,
+    kWriteAttemptExists,
 };
 
 class Status {

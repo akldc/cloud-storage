@@ -126,6 +126,10 @@ public:
      */
     void forceClose();
 
+    // May be called from another thread; the Channel is changed in its I/O loop.
+    void startRead();
+    void stopRead();
+
     /**
      * @brief 获取输入缓冲区
      */
@@ -151,6 +155,8 @@ private:
     void sendInLoop(const void* message, size_t len);
     void shutdownInLoop();
     void forceCloseInLoop();
+    void startReadInLoop();
+    void stopReadInLoop();
 
     EventLoop* loop_;          // 所属的事件循环
     const string name_;        // 连接名字
