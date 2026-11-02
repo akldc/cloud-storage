@@ -18,6 +18,7 @@ find_package(Threads REQUIRED)
 include(CMakePackageConfigHelpers)
 
 option(MYMUDUO_BUILD_HTTP "Build the optional HTTP protocol library" ON)
+option(MYMUDUO_BUILD_COORDINATOR "Build Coordinator V1 control plane" OFF)
 option(MYMUDUO_BUILD_EXAMPLES "Build network examples" ON)
 option(MYMUDUO_BUILD_TESTS "Build network regression tests" ON)
 option(MYMUDUO_BUILD_LEGACY_FILE_MANAGER
@@ -27,7 +28,12 @@ add_subdirectory(base)
 add_subdirectory(net)
 add_subdirectory(storage)
 
-if(MYMUDUO_BUILD_HTTP)
+if(MYMUDUO_BUILD_COORDINATOR)
+    add_subdirectory(proto)
+    add_subdirectory(coordinator)
+endif()
+
+if(MYMUDUO_BUILD_HTTP OR MYMUDUO_BUILD_COORDINATOR)
     add_subdirectory(apps)
 endif()
 

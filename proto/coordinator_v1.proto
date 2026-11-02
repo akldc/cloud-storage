@@ -1,0 +1,51 @@
+syntax = "proto3";
+
+package object_storage.control.v1;
+
+// V1 control traffic only. Placement returns candidates, not confirmed replicas.
+// Invalid fields: INVALID_ARGUMENT; unknown/expired node: NOT_FOUND;
+// occupied node ID or endpoint: ALREADY_EXISTS; stale instance or changed
+// endpoint: FAILED_PRECONDITION; full registry: RESOURCE_EXHAUSTED;
+// insufficient placement candidates: FAILED_PRECONDITION.
+service Coordinator {
+  rpc RegisterNode(RegisterNodeRequest) returns (RegisterNodeReply);
+  rpc Heartbeat(HeartbeatRequest) returns (HeartbeatReply);
+  rpc UnregisterNode(UnregisterNodeRequest) returns (UnregisterNodeReply);
+  rpc GetNode(GetNodeRequest) returns (NodeInfo);
+  rpc ListNodes(ListNodesRequest) returns (ListNodesReply);
+  rpc GetPlacement(GetPlacementRequest) returns (GetPlacementReply);
+}
+
+message RegisterNodeRequest {
+  string node_id = 1;
+  string instance_id = 2;
+  string host = 3;
+  uint32 port = 4;
+}
+message RegisterNodeReply {
+  uint32 heartbeat_interval_ms = 1;
+  uint32 lease_timeout_ms = 2;
+}
+message HeartbeatRequest { string node_id = 1; string instance_id = 2; }
+message HeartbeatReply {}
+message UnregisterNodeRequest { string node_id = 1; string instance_id = 2; }
+message UnregisterNodeReply {}
+message GetNodeRequest { string node_id = 1; }
+message ListNodesRequest {}
+
+enum NodeState {
+  NODE_STATE_UNSPECIFIED = 0;
+  NODE_ONLINE = 1;
+  NODE_OFFLINE = 2;
+}
+message NodeInfo {
+  string node_id = 1;
+  string instance_id = 2;
+  string host = 3;
+  uint32 port = 4;
+  NodeState state = 5;
+  int64 last_seen_unix_ms = 6; // Observability only; never used for leases.
+}
+message ListNodesReply { repeated NodeInfo nodes = 1; }
+message GetPlacementRequest { string chunk_id = 1; uint32 replica_count = 2; }
+message GetPlacementReply { repeated NodeInfo candidates = 1; }
