@@ -488,7 +488,7 @@ TcpConnection::handleRead
 
 当前支持请求行、Header、`Content-Length` body 和基础 keep-alive/pipelining；不支持 chunked transfer encoding。
 
-需要特别注意：当前 `HttpContext` 会把完整 body 放入 `HttpRequest::body_`，`HttpResponse` 也保存完整 body，因此只适合小请求/响应。对象存储的大文件数据面必须先增加流式 body 回调和背压，详见 [`docs/object_storage_phase1_design.md`](docs/object_storage_phase1_design.md)。
+需要特别注意：当前 `HttpContext` 会把完整 body 放入 `HttpRequest::body_`，`HttpResponse` 也保存完整 body，因此只适合小请求/响应。对象存储的大文件数据面必须先增加流式 body 回调和背压，详见 [`docs/01_object_storage_phase1_design.md`](docs/01_object_storage_phase1_design.md)。
 
 ## 16. 所有权与线程规则速查
 

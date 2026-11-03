@@ -54,7 +54,7 @@ cmake --build build-core -j
 
 ## Coordinator V1 开发构建
 
-Coordinator 控制面目前完成[阶段 E：多进程验收](docs/Coordinator_V1_Development.md)。启用开关需要与运行库版本匹配的 `protoc`、Protobuf 开发包、`grpc_cpp_plugin` 和 `grpc++` pkg-config 包。`coordinator` 提供注册、心跳、注销、节点查询和候选放置 RPC；Storage Node 可选择启用控制代理。
+Coordinator 控制面目前完成[阶段 E：多进程验收](docs/05_Coordinator_V1_Development.md)。启用开关需要与运行库版本匹配的 `protoc`、Protobuf 开发包、`grpc_cpp_plugin` 和 `grpc++` pkg-config 包。`coordinator` 提供注册、心跳、注销、节点查询和候选放置 RPC；Storage Node 可选择启用控制代理。
 
 ```bash
 cmake -S . -B build-coordinator \
@@ -85,8 +85,10 @@ Coordinator 重启会清空节点表，运行中的代理通过重新注册恢�
 
 架构审查、修复记录和后续使用边界见 [PROJECT_ARCHITECTURE.md](PROJECT_ARCHITECTURE.md)。
 
-分布式对象存储的第一阶段设计见 [docs/object_storage_phase1_design.md](docs/object_storage_phase1_design.md)。
+分布式对象存储的第一阶段设计见 [docs/01_object_storage_phase1_design.md](docs/01_object_storage_phase1_design.md)。
 
-单节点 Storage Node 的启动方式、HTTP 请求头及背压语义见 [docs/storage_node_http.md](docs/storage_node_http.md)。
+单节点 Storage Node 的启动方式、HTTP 请求头及背压语义见 [docs/03_storage_node_http.md](docs/03_storage_node_http.md)。
+
+文档阅读顺序见 [docs/README.md](docs/README.md)；下一阶段的单副本对象上传下载方案见 [设计与任务](docs/06_Single_Replica_Object_Development.md)。
 
 现有 Reactor/TCP/HTTP 源码的分层导览和推荐阅读顺序见 [NETWORK_FRAMEWORK_GUIDE.md](NETWORK_FRAMEWORK_GUIDE.md)。

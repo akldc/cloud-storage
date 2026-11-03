@@ -55,7 +55,7 @@ git diff --check
 
 ## Storage Node HTTP 阶段
 
-单节点 Storage Node HTTP 数据面已实现并通过测试。 可用 ./build/bin/storage_node ROOT PORT 启动；请求协议见 storage_node_http.md (docs/storage_node_http.md)。
+单节点 Storage Node HTTP 数据面已实现并通过测试。 可用 ./build/bin/storage_node ROOT PORT 启动；请求协议见 03_storage_node_http.md (docs/03_storage_node_http.md)。
 
 新增服务支持分段 PUT、HEAD 查询持久化偏移、GET 与单段 Range、DELETE，以及已提交 Chunk 的重复上传。PUT 按 64 KiB 窗口交给磁盘线程 Append 和 Checkpoint；断线保留已持久化前缀。Commit 结果不确定时返回 503 和 X-Commit-State: unknown，要求调用方查询状态或经重启恢复确认。
 
@@ -67,7 +67,7 @@ git diff --check
 
 已知限制：当前每连接只处理一个已知长度请求；尚无认证、TLS、chunked 传输、同一 root 的进程间排他锁或 trash 清理。GET 返回存储的 SHA-256 供客户端校验，不在每次读取时重新计算全量校验和。内存测试验证了上述场景，尚不构成所有负载下的形式化上界证明。
 
-本阶段新增 `storage/node/StorageNode.*`、`apps/storage_node.cc` 与真实 socket 集成测试，并扩展 HTTP 头部暂停解析、TCP 暂停/恢复读取、线程池非阻塞提交和 EventLoop 退出后回调排空。PUT/GET 使用固定 64 KiB 数据窗口、单连接一个在途磁盘任务、有界队列与连接上限。断线保留检查点；服务退出时先排空任务与资源，再析构 Store。协议和限制见 `docs/storage_node_http.md`。
+本阶段新增 `storage/node/StorageNode.*`、`apps/storage_node.cc` 与真实 socket 集成测试，并扩展 HTTP 头部暂停解析、TCP 暂停/恢复读取、线程池非阻塞提交和 EventLoop 退出后回调排空。PUT/GET 使用固定 64 KiB 数据窗口、单连接一个在途磁盘任务、有界队列与连接上限。断线保留检查点；服务退出时先排空任务与资源，再析构 Store。协议和限制见 `docs/03_storage_node_http.md`。
 
 在 Ubuntu 22.04.5 上，启用 `-Wall -Wextra -Wpedantic` 的完整构建无警告；新增集成测试与原有测试组成的 CTest **8/8 通过、0 跳过**，ASan/UBSan 构建与完整 CTest 也 **8/8 通过、0 跳过**。`MYMUDUO_BUILD_HTTP=OFF` 的核心配置及构建通过。集成测试覆盖 8 MiB 上传下载、Range、续传与重启、重复上传、并发连接、慢读客户端、人工磁盘延迟、活动写入时删除冲突、服务在上传期间关闭、空闲连接超时，以及进程高水位内存检查。具体命令沿用上面的构建命令，完整测试使用 `ctest --test-dir build --output-on-failure` 和 `ctest --test-dir build-sanitize --output-on-failure`。
 

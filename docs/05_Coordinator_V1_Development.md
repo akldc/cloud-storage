@@ -1,6 +1,6 @@
 # Coordinator V1 技术设计与开发任务
 
-> 状态：开发前设计，本文所述 Coordinator、gRPC 接口和节点代理均**尚未实现**。依据当前源码、[`README.md`](../README.md)、[Constitution](../.specify/memory/constitution.md)、[一期设计](object_storage_phase1_design.md)、[Storage Node HTTP 契约](storage_node_http.md)及 [V1 遗留问题](storage_node_v1_issues.md)。早期设计中的对象元数据、上传会话、复制与恢复是后续方向；本阶段只完成节点控制面和候选放置。
+> 状态：Coordinator V1 开发前的历史设计；其中“尚未实现”描述的是写作时点。节点注册、心跳和候选放置现已实现，实际行为以当前源码与测试为准。依据当时源码、[`README.md`](../README.md)、[Constitution](../.specify/memory/constitution.md)、[一期设计](01_object_storage_phase1_design.md)、[Storage Node HTTP 契约](03_storage_node_http.md)及 [V1 遗留问题](04_storage_node_v1_issues.md)。对象元数据、上传会话、复制与恢复仍属后续方向。
 
 ## 1. 当前架构与新增位置
 
@@ -157,4 +157,4 @@ Registry 只在锁内生成在线快照，不持锁计算哈希或组装 protobu
 
 内存 Registry 意味着 Coordinator 重启后状态短时为空，且没有对象/Chunk 库存或历史实例接管顺序；本次进程内的 instance ID 检查不能充当跨重启的持久化 fencing。容量满时清理的离线记录也会丢失历史身份信息，旧实例再次出现将被视作新注册请求。endpoint 唯一性仅针对规范化后相等的地址文本，不能识别 DNS 别名和实际网络转发关系。心跳只是“控制线程还活着”，不等于磁盘健康或 HTTP 可达。放置结果不是副本记录，不能作为读取、删除或修复的权威依据。以后增加真实副本写入时，需引入持久化元数据、提交确认与对账，而不是在当前节点表上追加一个 `has_chunk` 布尔值。
 
-[Storage Node V1 遗留问题](storage_node_v1_issues.md)中的删除后同步失败、分片祖先目录同步失败、trash 回收、请求头/超时等问题未因接入 Coordinator 而消失。V1 可先完成节点控制面的独立开发；在宣称可靠副本放置、删除后恢复或严格 `201/204` 崩溃持久化保证前，须按该清单补齐修复与故障测试。控制面当前无认证/TLS，部署边界只能是可信网络；引入不可信客户端访问时需先设计身份、授权与网络隔离。
+[Storage Node V1 遗留问题](04_storage_node_v1_issues.md)中的删除后同步失败、分片祖先目录同步失败、trash 回收、请求头/超时等问题未因接入 Coordinator 而消失。V1 可先完成节点控制面的独立开发；在宣称可靠副本放置、删除后恢复或严格 `201/204` 崩溃持久化保证前，须按该清单补齐修复与故障测试。控制面当前无认证/TLS，部署边界只能是可信网络；引入不可信客户端访问时需先设计身份、授权与网络隔离。

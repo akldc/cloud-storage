@@ -1,6 +1,6 @@
 # ChunkStore 与 Storage Node 源码学习指南
 
-> 阅读基准：当前工作区的 C++17 源码、`README.md`、`PROJECT_ARCHITECTURE.md`、`NETWORK_FRAMEWORK_GUIDE.md`、`docs/object_storage_phase1_design.md`、`docs/storage_node_http.md` 与现有测试。本文描述**现有实现**；早期设计文档第 7 节对 HTTP 尚不能流式处理的判断属于当时的状态，不能代替现在的 `StorageNode.cc`。下文的“保证”指代码在其文件系统和调用顺序前提下试图提供的语义；测试验证范围单独说明。
+> 阅读基准：当前工作区的 C++17 源码、`README.md`、`PROJECT_ARCHITECTURE.md`、`NETWORK_FRAMEWORK_GUIDE.md`、`docs/01_object_storage_phase1_design.md`、`docs/03_storage_node_http.md` 与现有测试。本文描述**现有实现**；早期设计文档第 7 节对 HTTP 尚不能流式处理的判断属于当时的状态，不能代替现在的 `StorageNode.cc`。下文的“保证”指代码在其文件系统和调用顺序前提下试图提供的语义；测试验证范围单独说明。
 
 ## 1. 先建立整体心智模型
 
@@ -96,7 +96,7 @@ flowchart LR
 
 `rename` 在同一文件系统内使目录名切换原子可见：读者看到的是 staging 或最终目录，而不是半个最终 Chunk。`fdatasync(data.part)` 保证文件数据及读取它所需的元信息进入持久化边界；`fsync(meta.tmp)` 保证元数据内容；`rename(meta.tmp, meta)` 替换名字；`fsync(所在目录)` 保证目录项更新；跨父目录的 `rename` 还要同步**源父目录和目标父目录**。`AtomicWrite` 与 `MoveDirectory` 对应这些步骤。`Initialize` 检查 `chunks`、`staging`、`trash`、`quarantine` 同设备，避免跨设备 rename 失去该语义。[`storage/chunk_store/ChunkStore.cc`](../storage/chunk_store/ChunkStore.cc) `DataSync`/`AtomicWrite`/`MoveDirectory`/`Initialize`
 
-系统调用失败尤其是 rename 后 fsync 失败，可能出现“当前进程可见，但掉电后能否留存不确定”。`Commit` 因而返回错误；`LoadCommitted` 在报告已提交前再次同步最终父目录。即便如此，单凭一条错误响应也不能倒推出 Chunk 不存在。这里的持久化语义依赖本地文件系统正确实现 `fsync`、存储设备兑现刷盘；现有测试使用错误注入与进程重启，没有模拟真实断电。[`storage/chunk_store/ChunkStore.cc`](../storage/chunk_store/ChunkStore.cc) `LoadCommitted`、[`docs/storage_node_http.md`](storage_node_http.md)
+系统调用失败尤其是 rename 后 fsync 失败，可能出现“当前进程可见，但掉电后能否留存不确定”。`Commit` 因而返回错误；`LoadCommitted` 在报告已提交前再次同步最终父目录。即便如此，单凭一条错误响应也不能倒推出 Chunk 不存在。这里的持久化语义依赖本地文件系统正确实现 `fsync`、存储设备兑现刷盘；现有测试使用错误注入与进程重启，没有模拟真实断电。[`storage/chunk_store/ChunkStore.cc`](../storage/chunk_store/ChunkStore.cc) `LoadCommitted`、[`docs/03_storage_node_http.md`](03_storage_node_http.md)
 
 ### 3.3 启动恢复：按磁盘证据决定状态
 
@@ -242,13 +242,13 @@ sequenceDiagram
 | `unique_ptr` Writer/Reader + Session `shared_ptr` | fd 独占所有权，异步任务可保持会话活着，断线用 weak connection 避免错误回包 | 必须严格控制任务、清理池、Store 析构顺序；Writer 的 Store 裸指针不能独立延寿 Store |
 | 按窗口 Checkpoint + Commit 全量 SHA | 断点续传到明确 durable offset，提交前确认完整内容 | 频繁同步牺牲吞吐；已提交数据的日常 GET 不全量校验，需客户端或显式 Verify |
 
-这里没有引入通用存储接口、数据库、网络中间件或复杂任务调度器。单节点阶段直接组合 Store、TCP 与一个普通 `ThreadPool` 就可验证核心行为。未来若出现多节点协调、复制或更严格的吞吐要求，可在真实需求和测量下重新评估线程数、检查点频率、GC 与接口；当前代码不能据此推断已有这些能力。[`docs/object_storage_phase1_design.md`](object_storage_phase1_design.md)
+这里没有引入通用存储接口、数据库、网络中间件或复杂任务调度器。单节点阶段直接组合 Store、TCP 与一个普通 `ThreadPool` 就可验证核心行为。未来若出现多节点协调、复制或更严格的吞吐要求，可在真实需求和测量下重新评估线程数、检查点频率、GC 与接口；当前代码不能据此推断已有这些能力。[`docs/01_object_storage_phase1_design.md`](01_object_storage_phase1_design.md)
 
 ## 7. 代码与测试应如何对应着读
 
 ### 7.1 先外后内的三轮阅读
 
-1. **建立外部契约**：读[`README.md`](../README.md)、[`docs/storage_node_http.md`](storage_node_http.md)、[`storage/common/Types.h`](../storage/common/Types.h)、[`storage/chunk_store/ChunkStore.h`](../storage/chunk_store/ChunkStore.h)、[`storage/node/StorageNode.h`](../storage/node/StorageNode.h)。先回答“谁调用谁、一次 PUT 的输入输出是什么”。
+1. **建立外部契约**：读[`README.md`](../README.md)、[`docs/03_storage_node_http.md`](03_storage_node_http.md)、[`storage/common/Types.h`](../storage/common/Types.h)、[`storage/chunk_store/ChunkStore.h`](../storage/chunk_store/ChunkStore.h)、[`storage/node/StorageNode.h`](../storage/node/StorageNode.h)。先回答“谁调用谁、一次 PUT 的输入输出是什么”。
 2. **跟进一条上传与下载**：从[`apps/storage_node.cc`](../apps/storage_node.cc) `main` 到[`storage/node/StorageNode.cc`](../storage/node/StorageNode.cc) `OnMessage`、`StartUpload`/`SubmitUploadWindow`、`StartLookup`/`NextDownload`；并行看[`net/HttpContext.cc`](../net/HttpContext.cc) `parseRequest`、[`net/TcpConnection.cc`](../net/TcpConnection.cc) `handleRead`/`sendInLoop`/`handleWrite`。在纸上写出每次 `stopRead`、`startRead`、`queueInLoop` 前后的线程与 Session phase。
 3. **深入磁盘协议与边界**：读[`storage/chunk_store/ChunkStore.cc`](../storage/chunk_store/ChunkStore.cc) 的 `AtomicWrite`、`MoveDirectory`、`Initialize`、`BeginWrite`、`ResumeWrite`、`LoadCommitted`、`Recover`；接着读[`ChunkWriter.cc`](../storage/chunk_store/ChunkWriter.cc) `Append`/`Checkpoint`/`Commit`，[`ChunkReader.cc`](../storage/chunk_store/ChunkReader.cc) `ReadAt`。最后对照测试模拟中断与失败点。
 
@@ -271,7 +271,7 @@ sequenceDiagram
 | [`tests/integration/storage_node_test.py`](../tests/integration/storage_node_test.py) | 真实 socket 的 8 MiB 分段 PUT/GET、HEAD 续传、Range、重复上传、断线重启、不同 Chunk 并发、慢读、模拟慢磁盘、活动 Writer 与 DELETE、关闭排空、root 竞争、空闲超时与若干 RSS 阈值 | RSS 场景不是所有连接数、头部输入和内核缓冲的形式化内存上界；没有覆盖每种磁盘错误到 HTTP 的端到端映射 |
 | `tests/buffer_test.cc`、`http_context_test.cc`、`tcp_server_test.cc` 等 | Buffer/HTTP 增量解析、并发 TCP 与跨线程回调的基础行为 | 不能替代整个 Storage Node 的故障与一致性证明 |
 
-按现有 `tests/CMakeLists.txt`，这些组成 CTest 测试。仓库的 `docs/storage_node_http.md` 记录此前 Debug 与 ASan/UBSan 完整测试均为 **8/8 通过**；本指南编写只阅读源码和测试，没有把旧测试记录冒充本次重新执行结果。当前可重复运行 `ctest --test-dir build --output-on-failure`，构建目录配置不同则先按 README 构建。[`tests/CMakeLists.txt`](../tests/CMakeLists.txt)
+按现有 `tests/CMakeLists.txt`，这些组成 CTest 测试。仓库的 `docs/03_storage_node_http.md` 记录此前 Debug 与 ASan/UBSan 完整测试均为 **8/8 通过**；本指南编写只阅读源码和测试，没有把旧测试记录冒充本次重新执行结果。当前可重复运行 `ctest --test-dir build --output-on-failure`，构建目录配置不同则先按 README 构建。[`tests/CMakeLists.txt`](../tests/CMakeLists.txt)
 
 ## 8. 一页回顾
 
