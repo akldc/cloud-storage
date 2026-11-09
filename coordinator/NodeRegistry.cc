@@ -7,6 +7,11 @@
 #include <stdexcept>
 
 namespace object_storage::coordinator {
+namespace {
+Result<std::string> NormalizeHost(const std::string& host);
+bool ValidIds(const std::string& nodeId, const std::string& instanceId);
+int64_t UnixMillis();
+}
 
 NodeRegistry::NodeRegistry(std::chrono::milliseconds lease) : lease_(lease)
 {

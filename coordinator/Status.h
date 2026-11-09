@@ -14,6 +14,7 @@ enum class Code {
     kAlreadyExists,
     kFailedPrecondition,
     kResourceExhausted,
+    kUnavailable,
     kInternal,
 };
 

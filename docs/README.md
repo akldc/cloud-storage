@@ -10,4 +10,4 @@
 | 03 | [Storage Node HTTP 数据面](03_storage_node_http.md) | 当前 Chunk API、流式传输与关闭语义 |
 | 04 | [Storage Node V1 遗留问题](04_storage_node_v1_issues.md) | 当前未解决的可靠性和功能边界 |
 | 05 | [Coordinator V1 开发设计](05_Coordinator_V1_Development.md) | 节点管理和候选放置的开发设计；对应能力现已实现 |
-| 06 | [单副本对象上传下载设计](06_Single_Replica_Object_Development.md) | 下一阶段计划；尚未实现 |
+| 06 | [单副本对象上传下载设计](06_Single_Replica_Object_Development.md) | 阶段 A 至 E 的基础链路与验收已完成；可选 Abort 待开发 |

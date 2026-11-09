@@ -57,7 +57,12 @@ const char* Reason(int code)
 
 Headers DescriptorHeaders(const ChunkDescriptor& descriptor)
 {
-    return {{"X-Generation", std::to_string(descriptor.generation)},
+    return {{"X-Chunk-Id", descriptor.chunkId},
+            {"X-Object-Id", descriptor.objectId},
+            {"X-Object-Version", std::to_string(descriptor.objectVersion)},
+            {"X-Chunk-Index", std::to_string(descriptor.index)},
+            {"X-Logical-Offset", std::to_string(descriptor.logicalOffset)},
+            {"X-Generation", std::to_string(descriptor.generation)},
             {"X-Chunk-Size", std::to_string(descriptor.size)},
             {"X-Checksum-Sha256", descriptor.checksum.value}};
 }
@@ -90,6 +95,8 @@ bool ParseRange(const std::string& header, uint64_t size, ByteRange* range)
     return true;
 }
 
+// 从 HTTP 请求头中解析上传请求的参数，填充到 BeginChunkWrite request中
+// offset是本请求在chunk的起始偏移
 bool ParseUploadRequest(const mymuduo::net::HttpRequest& http,
                         const std::string& chunkId, BeginChunkWrite* request,
                         uint64_t* offset)

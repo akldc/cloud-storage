@@ -39,7 +39,7 @@ cmake --build build -j4
 
 ### HEAD：状态和续传位置
 
-请求头 `X-Generation` 必需。已提交 Chunk 返回 `200`，并带 `X-Chunk-Size`、`X-Checksum-Sha256`、`X-Generation`。若希望查询未提交的 staging 上传，另带 `X-Upload-Id`；存在可恢复尝试时返回 `308 Resume Incomplete` 与 `X-Durable-Offset`。活动 Writer 占用该 Chunk 时可能返回 `409`，客户端稍后重试。不存在返回 `404`。
+请求头 `X-Generation` 必需。已提交 Chunk 返回 `200`，并带 `X-Chunk-Id`、`X-Object-Id`、`X-Object-Version`、`X-Chunk-Index`、`X-Logical-Offset`、`X-Chunk-Size`、`X-Checksum-Sha256`、`X-Generation`。这些描述符头也用于 GET 与可续传的 `308`。若希望查询未提交的 staging 上传，另带 `X-Upload-Id`；存在可恢复尝试时返回 `308 Resume Incomplete` 与 `X-Durable-Offset`。活动 Writer 占用该 Chunk 时可能返回 `409`，客户端稍后重试。不存在返回 `404`。
 
 ### GET：流式下载与 Range
 

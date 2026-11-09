@@ -14,6 +14,11 @@ service Coordinator {
   rpc GetNode(GetNodeRequest) returns (NodeInfo);
   rpc ListNodes(ListNodesRequest) returns (ListNodesReply);
   rpc GetPlacement(GetPlacementRequest) returns (GetPlacementReply);
+  rpc BeginUpload(BeginUploadRequest) returns (BeginUploadReply);
+  rpc GetUpload(GetUploadRequest) returns (GetUploadReply);
+  rpc ConfirmChunk(ConfirmChunkRequest) returns (ConfirmChunkReply);
+  rpc CommitUpload(CommitUploadRequest) returns (CommitUploadReply);
+  rpc GetObject(GetObjectRequest) returns (GetObjectReply);
 }
 
 message RegisterNodeRequest {
@@ -49,3 +54,63 @@ message NodeInfo {
 message ListNodesReply { repeated NodeInfo nodes = 1; }
 message GetPlacementRequest { string chunk_id = 1; uint32 replica_count = 2; }
 message GetPlacementReply { repeated NodeInfo candidates = 1; }
+
+// Object bytes stay on the Storage Node HTTP data path. Version and generation
+// are fixed to 1 for this single-replica object protocol.
+message UploadChunk {
+  uint32 index = 1;
+  uint64 offset = 2;
+  uint64 size = 3;
+  string sha256 = 4;
+}
+message PlannedChunk {
+  uint32 index = 1;
+  string chunk_id = 2;
+  uint64 offset = 3;
+  uint64 size = 4;
+  string sha256 = 5;
+  uint64 generation = 6;
+  string target_node_id = 7;
+  bool confirmed = 8;
+  string confirmed_node_id = 9;
+}
+enum UploadState {
+  UPLOAD_STATE_UNSPECIFIED = 0;
+  UPLOAD_PREPARING = 1;
+  UPLOAD_COMMITTED = 2;
+  UPLOAD_ABORTED = 3;
+}
+message BeginUploadRequest {
+  string request_id = 1;
+  uint64 total_size = 2;
+  string file_sha256 = 3;
+  repeated UploadChunk chunks = 4;
+}
+message BeginUploadReply {
+  string object_id = 1;
+  string upload_id = 2;
+  uint64 version = 3;
+  repeated PlannedChunk chunks = 4;
+}
+message GetUploadRequest { string request_id = 1; }
+message GetUploadReply {
+  string object_id = 1;
+  string upload_id = 2;
+  UploadState state = 3;
+  uint64 version = 4;
+  uint64 total_size = 5;
+  string file_sha256 = 6;
+  repeated PlannedChunk chunks = 7;
+}
+message ConfirmChunkRequest { string upload_id = 1; uint32 chunk_index = 2; }
+message ConfirmChunkReply {}
+message CommitUploadRequest { string upload_id = 1; }
+message CommitUploadReply { string object_id = 1; }
+message GetObjectRequest { string object_id = 1; }
+message GetObjectReply {
+  string object_id = 1;
+  uint64 version = 2;
+  uint64 total_size = 3;
+  string file_sha256 = 4;
+  repeated PlannedChunk chunks = 5;
+}

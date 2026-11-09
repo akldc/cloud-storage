@@ -2,7 +2,7 @@
 
 ## 项目目标与当前阶段
 
-本仓库是一个 C++ 对象存储项目，重点是存储引擎和基础架构能力，包括 Chunk 持久化、崩溃恢复、有界流式 I/O，以及后续的分布式扩展。目前已实现单节点本地 `ChunkStore`，并新增可独立运行的 Storage Node HTTP 数据面，支持单段流式 PUT、HEAD 续传查询、GET/Range 和 DELETE。尚未实现 Coordinator 或多副本功能。
+本仓库是一个 C++ 对象存储项目，重点是 Chunk 持久化、崩溃恢复、有界流式 I/O 与单副本对象链路。目前已实现本地 `ChunkStore`、Storage Node HTTP 数据面、Coordinator V1，以及支持上传、下载和侧车恢复的单副本 C++ Client；多副本仍未实现。下文早期阶段记录保留当时的状态，当前能力以 README 和最新阶段文档为准。
 
 ## 职责、所有权与生命周期
 

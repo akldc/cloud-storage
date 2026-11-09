@@ -117,6 +117,21 @@ def head(port, chunk, upload=UPLOAD):
                     {"X-Generation": "1", "X-Upload-Id": upload})
 
 
+def assert_descriptor(fields, chunk, headers):
+    expected = {
+        "x-chunk-id": chunk,
+        "x-object-id": headers["X-Object-Id"],
+        "x-object-version": headers["X-Object-Version"],
+        "x-chunk-index": headers["X-Chunk-Index"],
+        "x-logical-offset": headers["X-Logical-Offset"],
+        "x-chunk-size": headers["X-Chunk-Size"],
+        "x-checksum-sha256": headers["X-Checksum-Sha256"],
+        "x-generation": headers["X-Generation"],
+    }
+    for name, value in expected.items():
+        assert fields.get(name) == value, (name, fields)
+
+
 def test_main(executable):
     with tempfile.TemporaryDirectory(prefix="storage-node-test-") as root:
         server = Server(executable, root)
@@ -138,14 +153,17 @@ def test_main(executable):
             assert code == 409 and fields["x-durable-offset"] == str(len(first)), (code, fields)
             code, fields, _ = head(server.port, CHUNK)
             assert code == 308 and fields["x-durable-offset"] == str(len(first)), (code, fields)
+            assert_descriptor(fields, CHUNK, headers)
             rest = payload[len(first):]
             code, fields, _ = exchange(server.port, "PUT", CHUNK,
                                        put_headers(payload, len(first), len(payload)), rest)
             assert code == 201 and fields["x-durable-offset"] == str(len(payload)), (code, fields)
             code, fields, _ = head(server.port, CHUNK)
             assert code == 200 and fields["x-checksum-sha256"] == headers["X-Checksum-Sha256"]
-            code, _, content = exchange(server.port, "GET", CHUNK, {"X-Generation": "1"})
+            assert_descriptor(fields, CHUNK, headers)
+            code, fields, content = exchange(server.port, "GET", CHUNK, {"X-Generation": "1"})
             assert code == 200 and content == payload, (code, len(content))
+            assert_descriptor(fields, CHUNK, headers)
             code, fields, content = exchange(server.port, "GET", CHUNK,
                                               {"X-Generation": "1", "Range": "bytes=12345-54321"})
             assert code == 206 and content == payload[12345:54322], (code, len(content))

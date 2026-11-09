@@ -1,6 +1,6 @@
 # 单副本对象上传与下载：设计及开发任务
 
-> 状态：下一阶段设计，本文的对象目录、上传会话和 C++ Client **尚未实现**。依据当前 `proto/coordinator_v1.proto`、`coordinator/NodeRegistry.*` / `Placement.*` / `CoordinatorService.*`、`storage/node/StorageNode.*`、`storage/chunk_store/*`、现有测试、README、Constitution 和本目录历史设计。本文只规划单 Coordinator、单副本完整对象链路，不把 V1 的候选节点误写成已持有 Chunk 的节点。
+> 状态：阶段 A 至 E 的基础链路与验收已完成；可选 `AbortUpload` 尚未实现。C++ Client 支持空对象、固定 64 MiB 多 Chunk 和侧车恢复。本文是单 Coordinator、单副本完整对象链路的主要开发依据，不把 V1 的候选节点误写成已持有 Chunk 的节点。
 
 ## 1. 目标、边界与现有能力
 
@@ -13,7 +13,7 @@ flowchart LR
   CO --> DB[(SQLite 对象与上传元数据)]
 ```
 
-目前 `GetPlacement(chunk_id, 1)` 只从在线 `NodeRegistry` 返回候选节点，不写入记录；Coordinator 重启会丢失节点表。Storage Node 已有 `PUT /v1/chunks/{id}`、`HEAD` 查询、`GET` 和单段 Range；`ChunkStore` 的描述符已含 `chunkId`、`objectId`、`objectVersion`、`index`、`logicalOffset`、`size`、SHA-256 与 `generation`。但当前 [`DescriptorHeaders()`](../storage/node/StorageNodeHttp.cc) 只返回 Generation、大小、SHA-256，HEAD 尚不足以让 Coordinator 核对完整上传计划；本阶段需在**现有 HEAD** 响应中补齐字段。完整 Chunk 的 PUT 返回 `201`，描述符一致的重复 PUT 返回 `200`；未完成片段可返回 `202`，HEAD 可返回可续传的 `308`。Node 单次 PUT 内部按 64 KiB 窗口写入与 Checkpoint，最大 Chunk 默认 256 MiB。参见 [`StorageNode.cc`](../storage/node/StorageNode.cc)、[`ChunkStore.h`](../storage/chunk_store/ChunkStore.h) 和 [现有 HTTP 契约](03_storage_node_http.md)。
+`GetPlacement(chunk_id, 1)` 只从在线 `NodeRegistry` 返回候选节点，不写入确认位置；Coordinator 重启会丢失节点表。Storage Node 已有 `PUT /v1/chunks/{id}`、`HEAD` 查询、`GET` 和单段 Range；`ChunkStore` 的描述符含 `chunkId`、`objectId`、`objectVersion`、`index`、`logicalOffset`、`size`、SHA-256 与 `generation`。阶段 B 已在 [`DescriptorHeaders()`](../storage/node/StorageNodeHttp.cc) 补齐八项字段，使 Coordinator 能在 HEAD `200` 时核对完整上传计划。完整 Chunk 的 PUT 返回 `201`，描述符一致的重复 PUT 返回 `200`；未完成片段可返回 `202`，HEAD 可返回可续传的 `308`。Node 单次 PUT 内部按 64 KiB 窗口写入与 Checkpoint，最大 Chunk 默认 256 MiB。参见 [`StorageNode.cc`](../storage/node/StorageNode.cc)、[`ChunkStore.h`](../storage/chunk_store/ChunkStore.h) 和 [现有 HTTP 契约](03_storage_node_http.md)。
 
 本阶段使 `object_client upload FILE` 得到 Object ID，使 `object_client download OBJECT_ID OUTPUT` 根据**已确认位置**重建文件。只支持新建不可变对象，`version=1`、`generation=1`、每 Chunk 一个目标节点和一个确认位置；不提供覆盖、删除、用户 key、去重、多副本、自动迁移、修复或 Coordinator HA。文件字节不经过 Coordinator。操作假设可信网络和稳定的 Node ID ↔ 存储 root 绑定；现有节点注册并未验证磁盘身份。
 
@@ -60,7 +60,7 @@ Catalog 在本地文件系统上使用 SQLite，建议 `journal_mode=WAL`、`syn
 
 沿用单 Coordinator 约束：进程启动前对 `<db-path>.lock` 取得并持有排他 `flock`，防止两个 Coordinator 用同一 DB 却拥有各自内存 NodeRegistry。SQLite 连接由 Catalog 拥有，gRPC 同步调用可并发进入，但用一把 Catalog 互斥锁串行短事务和查询；**绝不持 Catalog 锁或 SQLite 写事务做 HTTP HEAD、gRPC、文件哈希或长时间等待**。NodeRegistry 自有锁；先取在线快照再访问 Catalog，不嵌套两把锁。服务停接收 RPC、等待 gRPC Server `Wait()` 返回后再关闭 Catalog。SQLite/磁盘错误必须返回明确失败，不能把未确认事务当作对象已提交。
 
-> 工具链检查：当前环境有 SQLite/libcurl 运行库，但未找到对应开发头文件或 pkg-config 描述；实现阶段需补齐开发包后才能让新增 target 构建。本轮不安装依赖。CMake 将新依赖限定在 Coordinator 对象目录/探测和 Client 目标，不影响原有 `MYMUDUO_BUILD_COORDINATOR=OFF` 构建。
+> 工具链检查：SQLite3 与 libcurl 开发包已就绪。CMake 将新依赖限定在对象 Catalog/探测目标，不影响原有 `MYMUDUO_BUILD_COORDINATOR=OFF` 构建；后续 Client 目标按阶段 C 接入。
 
 ## 4. 控制 RPC 初稿
 
@@ -150,7 +150,7 @@ sequenceDiagram
 | 下载目标已存在 | `RENAME_NOREPLACE` 返回 `EEXIST`，旧目标不被覆盖；不用先检查再普通 rename。 |
 | Coordinator 重启 | SQLite 恢复 `PREPARING/COMMITTED` 与确认位置；NodeRegistry 仍为空，待 Agent 注册。`GetObject` 可见性由数据库状态决定，下载可因节点尚未上线暂时失败。 |
 | 单副本节点故障或数据损坏 | 对象元数据仍可查询，但下载返回失败；不存在自动副本修复、重放置或静默改用候选节点。客户端 GET 逐块验摘要以发现静默损坏。 |
-| 已提交 Chunk 与对象未提交 | Chunk 可能成为孤儿；Abort 只标记元数据，不调用 DELETE。无跨系统原子事务，也无本阶段垃圾回收；长期运行需监控磁盘与 PREPARING 数量。 |
+| 已提交 Chunk 与对象未提交 | Chunk 可能成为孤儿；可选的 Abort 尚未实现。无跨系统原子事务，也无本阶段垃圾回收；长期运行需监控磁盘与 PREPARING 数量。 |
 
 [Storage Node 遗留问题](04_storage_node_v1_issues.md)中的 **S1**（DELETE 后源目录同步失败）本阶段因不执行自动删除而不在正常上传/下载链路上，但限制未来对象删除和孤儿回收的可靠性；**S2**（新建分片祖先目录同步失败）意味着某些 `201`/恢复路径遇到特定 `fsync` 故障后，仍不能宣称严格的断电后持久化保证。本阶段可做进程重启与故障注入验收，不能把“SQLite 元数据已提交 + HTTP HEAD 曾返回 200”表述为跨节点、断电后绝对不丢数据。GET 只读取已存的 Chunk 摘要，不替代 Client 的实际字节校验。Coordinator V1 的内存 Registry 无持久化 fencing；若 Node ID 错绑到另一存储 root，Catalog 的确认位置不会自动识别这一错误。
 
@@ -171,3 +171,14 @@ sequenceDiagram
 - **新增**：`coordinator/ObjectCatalog.{h,cc}`、`coordinator/ChunkProbe.{h,cc}`、`client/ObjectClient.{h,cc}`、`client/CMakeLists.txt`、`apps/object_client.cc`，以及 Catalog 和对象端到端测试。
 - **增量修改**：`proto/coordinator_v1.proto`、`coordinator/CoordinatorService.{h,cc}`、`apps/coordinator.cc`、`storage/node/StorageNodeHttp.cc`、相关 `CMakeLists.txt` 和现有 Storage Node / Coordinator 测试。`StorageNode::StartLookup()` 已取得完整描述符并调用 `DescriptorHeaders()`，预计无需改 `StorageNode.cc`、`ChunkStore` 或 Reactor；实施时以编译及协议测试核对。
 - `AbortUpload` 的 proto、Service 和 Catalog 分支放在 D 阶段或之后，不占用 C 阶段的小文件闭环工期。下载发布的 `renameat2(RENAME_NOREPLACE)` 属于 Client 文件路径，不触碰 Storage Node。
+
+## 10. 阶段 E 验收记录
+
+2026-11-03 在 Linux 本地临时目录、SQLite DB 与真实 socket 上完成阶段 E。`cmake --build build-object -j 4` 通过；`ctest --test-dir build-object --output-on-failure` 为 **21/21 通过**，包含原有 ChunkStore、Storage Node、Coordinator 回归。对象功能关闭时的 Coordinator 构建也通过。
+
+- `object_multi_node_test`：一个 Coordinator、两个 Storage Node 上中断约 150 MiB 的三 Chunk 上传；停止并重启 Coordinator 与节点后，用原侧车和 DB 计划续传。逐块检查 SQLite 确认 Node ID 与实际持有 Chunk 的 root 一致。再注册一个 Rendezvous 分数更高的空节点，使首块当前候选与确认位置不同；下载仍成功。确认节点下线时下载失败、不发布输出；该节点与 Coordinator 重启后，已提交对象仍可完整下载。
+- `object_lost_reply_test`：先持久化请求 ID，发起 Begin 后丢弃返回信息；完整 PUT 后关闭连接且不读取 `201`，客户端通过 HEAD `200` 确认并完成提交；另一次提交后丢弃 Commit 的返回信息，重跑客户端通过 `GetUpload=COMMITTED` 找回同一 Object ID。重复 PUT/Confirm/Commit 保持幂等。这里模拟的是调用方丢弃成功响应，未构建 HTTP/2 报文级丢包代理。
+- `object_catalog_test`：另一个 SQLite 连接持有写事务时，Begin 与 Commit 返回 `UNAVAILABLE`；新对象没有部分计划，原对象保持 `PREPARING` 且 `GetObject` 不可见。解除锁后重试成功。
+- 阶段 D 的约 150 MiB RSS 实测为客户端空闲 16,728 KiB、上传峰值 18,712 KiB，增长 1,984 KiB，低于 32 MiB 目标；数值仅代表该次测试环境。
+
+本轮没有进行物理断电测试，也没有关闭 [Storage Node 遗留问题](04_storage_node_v1_issues.md)中的 S1/S2。SQLite 已提交与 HEAD 曾返回 `200` 仍不能证明跨机器断电后绝对不丢数据。可选 `AbortUpload`、孤儿 Chunk 回收、多副本和 Coordinator HA 仍未实现。

@@ -83,12 +83,23 @@ Node ID 由部署方提供，重启同一逻辑节点时保持不变；每次进
 
 Coordinator 重启会清空节点表，运行中的代理通过重新注册恢复发现能力。若同一 Node ID 的旧、新实例在重启后同时存活，内存表无法还原重启前的接管顺序；先注册的实例可能取得该 ID。部署时应避免两代实例同时运行。多进程验收可用 `ctest --test-dir build-coordinator-http -R coordinator_multi_process_test --output-on-failure` 运行。
 
+单副本对象功能已完成[开发文档](docs/06_Single_Replica_Object_Development.md)的阶段 A 至 E 验收（可选的 Abort 尚未实现）：启用 `MYMUDUO_BUILD_COORDINATOR=ON` 和 `MYMUDUO_BUILD_OBJECTS=ON` 后，需有 SQLite3 与 libcurl 开发包。使用 `coordinator LISTEN_ADDRESS [HEARTBEAT_MS LEASE_MS RPC_DEADLINE_MS] --db SQLITE_PATH` 启动对象 Catalog；同一个数据库路径只允许一个 Coordinator 实例持有。当前提供 `BeginUpload`、`GetUpload`、`ConfirmChunk`、`CommitUpload`、`GetObject` 元数据 RPC。`ConfirmChunk` 会向计划目标发送有超时的 HTTP HEAD，八项描述符全部匹配后才记录确认位置。节点 Registry 仍只在内存中。
+
+`object_client` 支持空文件和最大 64 GiB 的固定 64 MiB 多 Chunk 对象：流式预扫描后按块 PUT、确认、提交；下载按确认位置顺序 GET，逐块及全文件校验摘要，并用无覆盖原子重命名发布。使用方式：
+
+```bash
+./build-object/bin/object_client upload 127.0.0.1:50051 input.bin [STATE_PATH]
+./build-object/bin/object_client download 127.0.0.1:50051 OBJECT_ID output.bin
+```
+
+上传时默认在源文件旁创建 `<FILE>.object-upload` 侧车和持久保留的 `<FILE>.object-upload.lock` 锁文件，也可通过 `STATE_PATH` 指定侧车位置；侧车在首次 Begin 前同步落盘，上传中断后须使用同一源文件和侧车路径重跑命令。两个 Client 不能同时推进同一侧车；源文件内容变化会被拒绝。成功提交后删除侧车，锁文件保留。CLI 对网络/提交结果不确定的情况会保留侧车并报告失败，不将其当作成功。V1 尚不支持节点永久失效后的自动换目标、Abort 或孤儿 Chunk 回收。
+
 架构审查、修复记录和后续使用边界见 [PROJECT_ARCHITECTURE.md](PROJECT_ARCHITECTURE.md)。
 
 分布式对象存储的第一阶段设计见 [docs/01_object_storage_phase1_design.md](docs/01_object_storage_phase1_design.md)。
 
 单节点 Storage Node 的启动方式、HTTP 请求头及背压语义见 [docs/03_storage_node_http.md](docs/03_storage_node_http.md)。
 
-文档阅读顺序见 [docs/README.md](docs/README.md)；下一阶段的单副本对象上传下载方案见 [设计与任务](docs/06_Single_Replica_Object_Development.md)。
+文档阅读顺序见 [docs/README.md](docs/README.md)；单副本对象上传下载的设计与验收记录见 [设计与任务](docs/06_Single_Replica_Object_Development.md)。
 
 现有 Reactor/TCP/HTTP 源码的分层导览和推荐阅读顺序见 [NETWORK_FRAMEWORK_GUIDE.md](NETWORK_FRAMEWORK_GUIDE.md)。

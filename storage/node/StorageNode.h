@@ -43,10 +43,12 @@ private:
     using Connection = mymuduo::net::TcpConnectionPtr;
     using SessionPtr = std::shared_ptr<Session>;
 
+    // 三个核心的回调函数，分别处理连接建立/断开、收到数据、发送数据完成
     void OnConnection(const Connection& connection);
     void OnMessage(const Connection& connection, mymuduo::net::Buffer* input,
                    mymuduo::Timestamp receivedAt);
     void OnWriteComplete(const Connection& connection);
+
     void HandleHeaders(const Connection& connection, const SessionPtr& session);
     void ConsumeUpload(const Connection& connection, const SessionPtr& session,
                        mymuduo::net::Buffer* input);

@@ -41,7 +41,7 @@ struct StorageNode::Session {
     uint64_t sent{0};
     bool diskBusy{false};
     std::chrono::steady_clock::time_point lastActivity{std::chrono::steady_clock::now()};
-    mymuduo::net::TimerId idleTimer;  // 定时器，用于检查连接是否空闲超过idleTimeoutSeconds，如果超过则关闭连接 todo
+    mymuduo::net::TimerId idleTimer;  // 定时器，用于检查连接是否空闲超过idleTimeoutSeconds，如果超过则关闭连接; todo
     ~Session() { assert(!writer && !reader); }
 };
 
@@ -99,7 +99,7 @@ Status StorageNode::Start()
 void StorageNode::OnConnection(const Connection& connection)
 {
     if (connection->connected() && !stopping_) {
-        if (connectionCount_ + cleanupPending_.load() >= options_.maxConnections) {
+        if (connectionCount_ + cleanupPending_.load() >= options_.maxConnections) {  // 超过最大连接数，直接关闭连接
             connection->forceClose();
             return;
         }
@@ -120,7 +120,7 @@ void StorageNode::OnConnection(const Connection& connection)
                     c->forceClose();
                 }
             });
-    } else {
+    } else { // 连接断开，清理Session对象，释放资源
         auto session = std::static_pointer_cast<Session>(connection->getContext());
         if (session) {
             loop_->cancel(session->idleTimer);
@@ -183,8 +183,7 @@ void StorageNode::HandleHeaders(const Connection& connection, const SessionPtr& 
         return;
     }
     if (request.method() == mymuduo::net::HttpRequest::kPut) {  // PUT /v1/chunks/<chunkId>  上传
-        if (!ParseUploadRequest(request, session->chunkId, &session->request,
-                                &session->offset) ||
+        if (!ParseUploadRequest(request, session->chunkId, &session->request, &session->offset) ||   // session->request保存了上传请求的参数，session->offset是本请求在chunk的起始偏移
             session->parser.contentLength() > session->request.descriptor.size - session->offset) {
             Reply(connection, session, 400, Reason(400));
             return;
@@ -257,6 +256,7 @@ void StorageNode::ReleaseReaderAsync(const SessionPtr& session)
 
 void StorageNode::StartUpload(const Connection& connection, const SessionPtr& session)
 {
+    // session状态切换为kOpening，表示正在尝试打开chunk进行写入
     session->phase = Session::kOpening;
     std::weak_ptr<mymuduo::net::TcpConnection> weak = connection;
     auto outcome = std::make_shared<Status>();
@@ -268,6 +268,8 @@ void StorageNode::StartUpload(const Connection& connection, const SessionPtr& se
         }
         *outcome = opened.status();
         if (opened.ok()) session->writer = std::move(opened).value();  // session正式拥有writer
+
+        // 通知eventloop线程，writer准备好，可以开始上传数据了
         loop_->queueInLoop([this, session, weak, outcome] {
             auto c = weak.lock();
             if (!c || !c->connected() || stopping_) {
@@ -283,13 +285,15 @@ void StorageNode::StartUpload(const Connection& connection, const SessionPtr& se
                 Reply(c, session, HttpCode(*outcome), Reason(HttpCode(*outcome)));
                 return;
             }
+            // 检查writer的descriptor和请求的descriptor是否一致
+            // 检查请求的offset是否和writer已经接收的字节数一致，确保上传数据是连续的
             if (!(session->writer->descriptor() == session->request.descriptor) ||
                 session->writer->receivedBytes() != session->offset) {
                 Reply(c, session, 409, Reason(409), "",
                       {{"X-Durable-Offset", std::to_string(session->writer->durableBytes())}});
                 return;
             }
-            // 校验通过，开始上传数据
+            // 校验通过，修改状态，开始上传数据
             session->phase = Session::kUpload;
             ConsumeUpload(c, session, c->inputBuffer()); 
         });
@@ -328,7 +332,7 @@ void StorageNode::ConsumeUpload(const Connection& connection, const SessionPtr& 
     const size_t take = std::min({input->readableBytes(),
                                   session->parser.remainingLength(), kWindow});
     if (take == 0) {
-        connection->startRead();
+        connection->startRead(); // 当前 TcpConnection 的输入 Buffer 中已经没有可消费的数据，但 HTTP Body 还没有全部接收完成
         return;
     }
     // 从网络buffer中拷贝数据到data
@@ -364,7 +368,7 @@ void StorageNode::SubmitUploadWindow(const Connection& connection, const Session
         }
         ChunkWriter& writer = *session->writer;
         if (!data.empty()) {
-            auto appended = writer.Append(session->offset, data.data(), data.size());
+            auto appended = writer.Append(session->offset, data.data(), data.size());  // Append
             result->status = appended.status;
             result->expected = appended.expectedOffset;
             result->durable = appended.durableOffset;
@@ -378,7 +382,7 @@ void StorageNode::SubmitUploadWindow(const Connection& connection, const Session
             result->durable = writer.durableBytes();
         }
         if (result->status.ok() && last &&
-            writer.receivedBytes() == session->request.descriptor.size) { // 如果是最后一块数据，并且已经写入的字节数等于chunk的总大小，则提交chunk
+            writer.receivedBytes() == session->request.descriptor.size) { // 最后一块数据 && 已经写入的字节数等于chunk的总大小，则提交chunk
             auto committed = writer.Commit();  // 提交
             result->status = committed.status();
             result->committed = committed.ok();
@@ -386,7 +390,7 @@ void StorageNode::SubmitUploadWindow(const Connection& connection, const Session
                 Status aborted = writer.Abort();
                 if (!aborted.ok()) result->uncertain = true;
             } else if (!committed.ok()) {
-                result->uncertain = true;
+                result->uncertain = true;   // commit阶段发生错误，无法确定最终 Chunk 是否已经完成发布。选择让client端后续通过head查询实际状态
             }
         }
         loop_->queueInLoop([this, session, weak, result, last] {  // 通过queueInLoop将结果回调到主线程
@@ -397,12 +401,13 @@ void StorageNode::SubmitUploadWindow(const Connection& connection, const Session
             }
             if (!result->status.ok()) {
                 const int code = result->uncertain ? 503 : HttpCode(result->status);
-                Headers headers{{"X-Durable-Offset", std::to_string(result->durable)}};
+                Headers headers{{"X-Durable-Offset", std::to_string(result->durable)}};  // 磁盘写入失败，返回503或其他错误码，并告知客户端当前chunk的持久化偏移量
                 if (result->uncertain) headers.emplace_back("X-Commit-State", "unknown");
                 Reply(c, session, code, Reason(code), "", headers);
                 return;
             }
             // 成功append数据，更新session的offset为writer的receivedBytes()
+            // 下一次提交从session->offset开始，确保数据连续写入
             session->offset = result->expected;
             if (last) {
                 const int code = result->committed ? 201 : 202;

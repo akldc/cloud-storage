@@ -18,6 +18,20 @@ add_test(NAME chunk_store_test COMMAND chunk_store_test)
 set_tests_properties(chunk_store_test PROPERTIES TIMEOUT 30)
 
 if(MYMUDUO_BUILD_COORDINATOR)
+    if(MYMUDUO_BUILD_OBJECTS)
+        add_executable(object_catalog_test object_catalog_test.cc)
+        target_link_libraries(object_catalog_test PRIVATE coordinator_object_catalog coordinator_control)
+        add_test(NAME object_catalog_test COMMAND object_catalog_test)
+        set_tests_properties(object_catalog_test PROPERTIES TIMEOUT 30)
+        add_executable(object_grpc_test object_grpc_test.cc)
+        target_link_libraries(object_grpc_test PRIVATE coordinator_service)
+        add_test(NAME object_grpc_test COMMAND object_grpc_test)
+        set_tests_properties(object_grpc_test PROPERTIES TIMEOUT 30)
+        add_executable(chunk_confirm_test chunk_confirm_test.cc)
+        target_link_libraries(chunk_confirm_test PRIVATE coordinator_service)
+        add_test(NAME chunk_confirm_test COMMAND chunk_confirm_test)
+        set_tests_properties(chunk_confirm_test PROPERTIES TIMEOUT 30)
+    endif()
     add_executable(coordinator_logic_test coordinator_logic_test.cc)
     target_link_libraries(coordinator_logic_test PRIVATE coordinator_control)
     add_test(NAME coordinator_logic_test COMMAND coordinator_logic_test)
@@ -58,6 +72,40 @@ if(MYMUDUO_BUILD_COORDINATOR)
                     $<TARGET_FILE:storage_node>
                     $<TARGET_FILE:coordinator_probe>)
         set_tests_properties(coordinator_multi_process_test PROPERTIES TIMEOUT 90)
+        if(MYMUDUO_BUILD_OBJECTS)
+            add_test(NAME object_small_file_test
+                COMMAND ${Python3_EXECUTABLE}
+                        ${CMAKE_CURRENT_SOURCE_DIR}/integration/object_small_file_test.py
+                        $<TARGET_FILE:coordinator>
+                        $<TARGET_FILE:storage_node>
+                        $<TARGET_FILE:coordinator_probe>
+                        $<TARGET_FILE:object_client>)
+            set_tests_properties(object_small_file_test PROPERTIES TIMEOUT 60)
+            add_test(NAME object_resume_test
+                COMMAND ${Python3_EXECUTABLE}
+                        ${CMAKE_CURRENT_SOURCE_DIR}/integration/object_resume_test.py
+                        $<TARGET_FILE:coordinator>
+                        $<TARGET_FILE:storage_node>
+                        $<TARGET_FILE:coordinator_probe>
+                        $<TARGET_FILE:object_client>)
+            set_tests_properties(object_resume_test PROPERTIES TIMEOUT 180)
+            add_test(NAME object_multi_node_test
+                COMMAND ${Python3_EXECUTABLE}
+                        ${CMAKE_CURRENT_SOURCE_DIR}/integration/object_multi_node_test.py
+                        $<TARGET_FILE:coordinator>
+                        $<TARGET_FILE:storage_node>
+                        $<TARGET_FILE:coordinator_probe>
+                        $<TARGET_FILE:object_client>)
+            set_tests_properties(object_multi_node_test PROPERTIES TIMEOUT 180)
+            add_test(NAME object_lost_reply_test
+                COMMAND ${Python3_EXECUTABLE}
+                        ${CMAKE_CURRENT_SOURCE_DIR}/integration/object_lost_reply_test.py
+                        $<TARGET_FILE:coordinator>
+                        $<TARGET_FILE:storage_node>
+                        $<TARGET_FILE:coordinator_probe>
+                        $<TARGET_FILE:object_client>)
+            set_tests_properties(object_lost_reply_test PROPERTIES TIMEOUT 60)
+        endif()
     endif()
 endif()
 

@@ -1,5 +1,8 @@
 #include "coordinator/Config.h"
 #include "coordinator/CoordinatorService.h"
+#ifdef MYMUDUO_BUILD_OBJECTS
+#include "coordinator/ObjectCatalog.h"
+#endif
 
 #include <charconv>
 #include <chrono>
@@ -28,14 +31,27 @@ bool ParsePositiveUint(const char* text, uint32_t* value)
 int main(int argc, char* argv[])
 {
     using namespace object_storage::coordinator;
-    if ((argc != 2 && argc != 5) || argv[1][0] == '\0') {
-        std::cerr << "usage: coordinator LISTEN_ADDRESS [HEARTBEAT_MS LEASE_MS RPC_DEADLINE_MS]\n";
+    const bool hasDb = (argc == 4 || argc == 7) &&
+                       std::string(argv[argc - 2]) == "--db";
+    const bool hasTimings = argc == 5 || argc == 7;
+    if ((argc != 2 && argc != 5 && !hasDb) || argv[1][0] == '\0') {
+        std::cerr << "usage: coordinator LISTEN_ADDRESS [HEARTBEAT_MS LEASE_MS RPC_DEADLINE_MS]"
+#ifdef MYMUDUO_BUILD_OBJECTS
+                  << " [--db SQLITE_PATH]"
+#endif
+                  << '\n';
         return 2;
     }
+#ifndef MYMUDUO_BUILD_OBJECTS
+    if (hasDb) {
+        std::cerr << "object Catalog support is disabled in this build\n";
+        return 2;
+    }
+#endif
     uint32_t heartbeatMs = kDefaultHeartbeatIntervalMs;
     uint32_t leaseMs = kDefaultLeaseTimeoutMs;
     uint32_t rpcDeadlineMs = kDefaultRpcDeadlineMs;
-    if (argc == 5 && (!ParsePositiveUint(argv[2], &heartbeatMs) ||
+    if (hasTimings && (!ParsePositiveUint(argv[2], &heartbeatMs) ||
                       !ParsePositiveUint(argv[3], &leaseMs) ||
                       !ParsePositiveUint(argv[4], &rpcDeadlineMs))) {
         std::cerr << "timing values must be positive uint32 milliseconds\n";
@@ -57,7 +73,20 @@ int main(int argc, char* argv[])
     }
 
     NodeRegistry registry{std::chrono::milliseconds(leaseMs)};
+#ifdef MYMUDUO_BUILD_OBJECTS
+    std::unique_ptr<ObjectCatalog> catalog;
+    if (hasDb) {
+        try {
+            catalog = std::make_unique<ObjectCatalog>(argv[argc - 1]);
+        } catch (const std::exception& error) {
+            std::cerr << "cannot open object Catalog: " << error.what() << '\n';
+            return 1;
+        }
+    }
+    CoordinatorService service(&registry, heartbeatMs, leaseMs, catalog.get(), rpcDeadlineMs);
+#else
     CoordinatorService service(&registry, heartbeatMs, leaseMs);
+#endif
     grpc::ServerBuilder builder;
     builder.SetMaxReceiveMessageSize(1024 * 1024);
     builder.SetMaxSendMessageSize(1024 * 1024);
